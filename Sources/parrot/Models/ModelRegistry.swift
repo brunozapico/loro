@@ -8,30 +8,53 @@ import Foundation
 enum ModelRegistry {
     static let shared: [TranscriptionModel] = [
         TranscriptionModel(
+            id: "whisper-large-v3",
+            displayName: "Whisper Large v3 — Best accuracy",
+            engine: .whisperKit,
+            whisperKitID: "openai_whisper-large-v3-v20240930_626MB",
+            sizeMB: 626,
+            languages: ["es", "en"],
+            languageMode: .automatic,
+            recommended: true
+        ),
+        TranscriptionModel(
+            id: "whisper-small",
+            displayName: "Whisper Small — Balanced",
+            engine: .whisperKit,
+            whisperKitID: "openai_whisper-small",
+            sizeMB: 486,
+            languages: ["es", "en"],
+            languageMode: .automatic,
+            recommended: false
+        ),
+        TranscriptionModel(
+            id: "whisper-base",
+            displayName: "Whisper Base — Lightweight",
+            engine: .whisperKit,
+            whisperKitID: "openai_whisper-base",
+            sizeMB: 147,
+            languages: ["es", "en"],
+            languageMode: .automatic,
+            recommended: false
+        ),
+        TranscriptionModel(
             id: "whisper-base.en",
-            displayName: "Whisper Base (English)",
+            displayName: "Whisper Base — English only",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-base.en",
             sizeMB: 145,
             languages: ["en"],
-            recommended: true
-        ),
-        TranscriptionModel(
-            id: "whisper-large-v3-turbo",
-            displayName: "Whisper Large v3 Turbo",
-            engine: .whisperKit,
-            whisperKitID: "openai_whisper-large-v3-v20240930_turbo",
-            sizeMB: 1620,
-            languages: ["multi"],
+            languageMode: .englishOnly,
             recommended: false
         ),
         TranscriptionModel(
             id: "whisper-small.en",
-            displayName: "Whisper Small (English)",
+            displayName: "Whisper Small — English only",
             engine: .whisperKit,
             whisperKitID: "openai_whisper-small.en",
-            sizeMB: 488,
+            sizeMB: 486,
             languages: ["en"],
+            languageMode: .englishOnly,
             recommended: false
         ),
     ]

@@ -25,7 +25,7 @@ struct Run: ParsableCommand {
     @Flag(name: .long, help: "Disable the on-screen recording overlay.")
     var noOverlay: Bool = false
 
-    @Option(name: .long, help: "Model id to use. Defaults to the recommended model.")
+    @Option(name: .long, help: "Model id for this run. Overrides the saved selection.")
     var model: String?
 
     func run() throws {
@@ -33,11 +33,14 @@ struct Run: ParsableCommand {
         let initialSettings = MainActor.assumeIsolated { settingsStore.current }
 
         let chosenModel: TranscriptionModel
+        let modelIsOverridden = model != nil
         if let id = model {
             guard let m = ModelRegistry.find(id) else {
                 throw ValidationError("Unknown model: \(id). Run `parrot models list` to see options.")
             }
             chosenModel = m
+        } else if let savedModel = ModelRegistry.find(initialSettings.selectedModelID) {
+            chosenModel = savedModel
         } else {
             guard let m = ModelRegistry.recommended() else {
                 throw ValidationError("No models registered.")
@@ -73,7 +76,8 @@ struct Run: ParsableCommand {
         let settingsWindow = MainActor.assumeIsolated {
             SettingsWindowController(
                 store: settingsStore,
-                model: chosenModel,
+                activeModel: chosenModel,
+                modelIsOverridden: modelIsOverridden,
                 permissionManager: permissionManager,
                 overlayAllowed: !noOverlay,
                 onShortcutRecordingChanged: { isRecording in

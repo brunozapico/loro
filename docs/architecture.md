@@ -98,7 +98,7 @@ protocol Transcriber {
 
 Concrete implementations:
 
-- `WhisperKitTranscriber` — wraps the `WhisperKit` package. CoreML, ANE-accelerated.
+- `WhisperKitTranscriber` — wraps the `WhisperKit` package. CoreML, ANE-accelerated. Multilingual models explicitly enable per-dictation language detection with `DecodingOptions.detectLanguage`; English-only models pin `language` to `en`. The task is always `.transcribe`, never translation.
 - `ParakeetTranscriber` — wraps `FluidAudio` (or direct CoreML) for NVIDIA Parakeet TDT.
 
 Adding an engine = one new file conforming to `Transcriber`.
@@ -134,12 +134,13 @@ Source-backed model registry:
 
 ```swift
 struct TranscriptionModel: Codable {
-    let id: String              // "whisper-large-v3-turbo"
+    let id: String              // "whisper-large-v3"
     let displayName: String
     let engine: Engine          // .whisperKit | .parakeet
     let sizeMB: Int
     let whisperKitID: String?
     let languages: [String]
+    let languageMode: TranscriptionLanguageMode
     let recommended: Bool
 }
 
@@ -157,9 +158,12 @@ The menu bar's **Settings…** item opens a native tabbed SwiftUI interface host
 - global shortcut key code, modifier mask, and display label
 - activation mode (`pushToTalk` or `toggle`)
 - whether to show the recording overlay
+- selected default transcription model
 - custom spoken-phrase replacement rules
 
-Changes apply immediately. Replacement rules may contain personal values such as email addresses, so the UI explicitly identifies them as local preferences; they never enter logs or network requests. The active transcription model is shown read-only because model selection and loading still happen at process startup through `--model`. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
+Shortcut, activation, overlay, and replacement changes apply immediately. Model selection persists but applies on the next launch because the CoreML pipeline is loaded and warmed once at process startup. A `--model` value overrides the saved selection for that run without modifying it.
+
+Replacement rules may contain personal values such as email addresses, so the UI explicitly identifies them as local preferences; they never enter logs or network requests. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
 
 ## Permissions
 
@@ -182,15 +186,17 @@ This is a macOS platform behavior, not a parrot bug. `parrot doctor` will identi
 
 ## Models — what ships
 
-Initial registry:
+Spanish-first registry:
 
 | Engine | Model | Size | Notes |
 |---|---|---|---|
-| WhisperKit | `whisper-base.en` | 145 MB | Default, English only |
-| WhisperKit | `whisper-small.en` | 488 MB | Higher-quality English |
-| WhisperKit | `whisper-large-v3-turbo` | 1620 MB | Multilingual |
+| WhisperKit | `whisper-large-v3` | 626 MB | Recommended; maximum Spanish + English accuracy, automatic language detection |
+| WhisperKit | `whisper-small` | 486 MB | Balanced multilingual option |
+| WhisperKit | `whisper-base` | 147 MB | Lightweight multilingual option |
+| WhisperKit | `whisper-base.en` | 145 MB | Lightweight English-only fallback |
+| WhisperKit | `whisper-small.en` | 486 MB | Higher-quality English-only fallback |
 
-Models are not bundled. WhisperKit downloads and caches them on first selection or through `parrot models download`.
+Models are not bundled. WhisperKit downloads and caches them on first selection or through `parrot models download`. The recommended 626 MB Large v3 variant follows WhisperKit's own recommendation for maximum multilingual accuracy. The English-only entries remain available, but automatic Spanish/English switching requires one of the multilingual entries.
 
 ## Data flow, end-to-end
 
@@ -203,7 +209,7 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 7. Push-to-Talk stops on release; Toggle stops on the next press.
 8. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
-10. `Transcriber` runs CoreML inference. Returns string.
+10. `Transcriber` detects the utterance language for multilingual models, runs CoreML inference in transcription mode, and returns text in the spoken language.
 11. `TextReplacementEngine` applies the configured local phrase substitutions in memory.
 12. `TextInjector` posts the resulting string at the cursor.
 13. Overlay hides. Status: `listening`. Loop.
@@ -241,7 +247,7 @@ parrot/
       WhisperKitTranscriber.swift
 
     Models/
-      AppSettings.swift         # persisted shortcut, mode, and overlay preference
+      AppSettings.swift         # persisted shortcut, mode, model, overlay, and replacements
       ModelRegistry.swift
       TextReplacement.swift     # custom replacement model + in-memory engine
       TranscriptionModel.swift  # Codable types
@@ -276,5 +282,5 @@ Swift's module unit is the **SPM target** (one target = one module = one `import
 
 - **Parakeet via FluidAudio vs. direct CoreML?** FluidAudio is faster to integrate but adds a dependency. Decide once we benchmark both.
 - **Hotkey conflicts.** Right-Option is unused on most keyboards but some users remap it. Print a clear error if `CGEventTap` registration fails.
-- **First-run UX.** Bundle `whisper-base.en` so `parrot` works out of the box, or always require an explicit download? Probably the latter — keeps the binary small and the model directory clean.
+- **First-run model download.** Add richer progress feedback for the recommended 626 MB model without persisting operational logs.
 - **Code signing.** A self-built unsigned binary works fine locally but accessibility permission persistence is more reliable for signed binaries. Decide if we sign for personal distribution.

@@ -27,7 +27,32 @@ actor WhisperKitTranscriber: Transcriber {
         if pipeline == nil { try await warmUp() }
         guard let pipeline else { throw TranscriberError.notLoaded }
 
-        let results = try await pipeline.transcribe(audioArray: audio)
+        let decodingOptions: DecodingOptions
+        switch model.languageMode {
+        case .automatic:
+            decodingOptions = DecodingOptions(
+                task: .transcribe,
+                language: nil,
+                usePrefillPrompt: true,
+                detectLanguage: true,
+                skipSpecialTokens: true,
+                withoutTimestamps: true
+            )
+        case .englishOnly:
+            decodingOptions = DecodingOptions(
+                task: .transcribe,
+                language: "en",
+                usePrefillPrompt: true,
+                detectLanguage: false,
+                skipSpecialTokens: true,
+                withoutTimestamps: true
+            )
+        }
+
+        let results = try await pipeline.transcribe(
+            audioArray: audio,
+            decodeOptions: decodingOptions
+        )
         let raw = results.map(\.text).joined(separator: " ")
         return Self.sanitize(raw)
     }

@@ -81,6 +81,7 @@ struct AppSettings: Equatable {
     var shortcut: HotkeyShortcut
     var dictationMode: DictationMode
     var showOverlay: Bool
+    var selectedModelID: String
     var replacementRules: [ReplacementRule]
 }
 
@@ -90,6 +91,7 @@ final class SettingsStore: ObservableObject {
         static let shortcut = "shortcut"
         static let dictationMode = "dictationMode"
         static let showOverlay = "showOverlay"
+        static let selectedModelID = "selectedModelID"
         static let replacementRules = "replacementRules"
     }
 
@@ -116,6 +118,14 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard showOverlay != oldValue else { return }
             defaults.set(showOverlay, forKey: Key.showOverlay)
+            notifyChange()
+        }
+    }
+
+    @Published var selectedModelID: String {
+        didSet {
+            guard selectedModelID != oldValue else { return }
+            defaults.set(selectedModelID, forKey: Key.selectedModelID)
             notifyChange()
         }
     }
@@ -157,6 +167,15 @@ final class SettingsStore: ObservableObject {
         }
 
         if
+            let storedModelID = defaults.string(forKey: Key.selectedModelID),
+            ModelRegistry.find(storedModelID) != nil
+        {
+            selectedModelID = storedModelID
+        } else {
+            selectedModelID = ModelRegistry.recommended()?.id ?? ""
+        }
+
+        if
             let data = defaults.data(forKey: Key.replacementRules),
             let decoded = try? JSONDecoder().decode([ReplacementRule].self, from: data)
         {
@@ -171,6 +190,7 @@ final class SettingsStore: ObservableObject {
             shortcut: shortcut,
             dictationMode: dictationMode,
             showOverlay: showOverlay,
+            selectedModelID: selectedModelID,
             replacementRules: replacementRules
         )
     }
@@ -179,6 +199,7 @@ final class SettingsStore: ObservableObject {
         shortcut = .functionKey
         dictationMode = .pushToTalk
         showOverlay = true
+        selectedModelID = ModelRegistry.recommended()?.id ?? ""
     }
 
     func addReplacementRule() {

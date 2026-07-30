@@ -27,16 +27,16 @@ That's it. There is no record button and no "send" — your global shortcut is t
 
 ## Settings
 
-Open the bird icon in the menu bar and choose **Settings…**. Changes apply immediately and persist across launches.
+Open the bird icon in the menu bar and choose **Settings…**. Preferences persist across launches; all changes except the transcription model apply immediately.
 
 - **Global shortcut** — click the shortcut field and press any key or modifier combination. `fn` remains the default.
 - **Activation** — choose **Push to Talk** (hold to record) or **Toggle** (press once to start, again to stop).
 - **Recording overlay** — show or hide the waveform pill.
-- **Selected model** — see the active model, identifier, languages, and download size.
+- **Transcription model** — choose a Spanish + English multilingual model or retain an English-only model. The choice persists across launches.
 - **Custom dictionary** — replace spoken words or phrases with exact text, such as `te paso mi mail` → `name@example.com`.
 - **Permissions** — see microphone and Accessibility status and jump directly to the relevant System Settings pane.
 
-The selected model remains controlled by `--model`; changing models from the GUI is not yet supported.
+The recommended model is Whisper Large v3 626 MB, optimized for maximum multilingual accuracy. Language is detected for every dictation, so Spanish and English utterances can alternate without changing a setting; occasional English terms inside Spanish speech remain supported. Model changes take effect after restarting Parrot. `--model` remains a session-only override.
 
 ## Privacy
 
@@ -59,7 +59,7 @@ parrot install --uninstall             # remove the LaunchAgent
 parrot doctor                          # check permissions + fn key setting
 parrot models list                     # list available models
 parrot models download <id>            # pre-download a model
-parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
+parrot --model whisper-small           # lighter multilingual model for this run
 parrot --no-overlay                    # override the overlay setting for this run
 ```
 

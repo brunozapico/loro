@@ -15,7 +15,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
     init(
         store: SettingsStore,
-        model: TranscriptionModel,
+        activeModel: TranscriptionModel,
+        modelIsOverridden: Bool,
         permissionManager: PermissionManager,
         overlayAllowed: Bool,
         onShortcutRecordingChanged: @escaping (Bool) -> Void
@@ -28,7 +29,8 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
 
         let rootView = SettingsView(
             store: store,
-            model: model,
+            activeModel: activeModel,
+            modelIsOverridden: modelIsOverridden,
             permissionManager: permissionManager,
             overlayAllowed: overlayAllowed,
             shortcutRecorder: shortcutRecorder,
@@ -76,7 +78,8 @@ private final class SettingsNavigationModel: ObservableObject {
 
 private struct SettingsView: View {
     @ObservedObject var store: SettingsStore
-    let model: TranscriptionModel
+    let activeModel: TranscriptionModel
+    let modelIsOverridden: Bool
     @ObservedObject var permissionManager: PermissionManager
     let overlayAllowed: Bool
     @ObservedObject var shortcutRecorder: ShortcutRecorderModel
@@ -87,7 +90,8 @@ private struct SettingsView: View {
         TabView(selection: $navigation.selectedTab) {
             GeneralSettingsView(
                 store: store,
-                model: model,
+                activeModel: activeModel,
+                modelIsOverridden: modelIsOverridden,
                 overlayAllowed: overlayAllowed,
                 shortcutRecorder: shortcutRecorder,
                 onShortcutRecordingChanged: onShortcutRecordingChanged
@@ -115,7 +119,8 @@ private struct SettingsView: View {
 
 private struct GeneralSettingsView: View {
     @ObservedObject var store: SettingsStore
-    let model: TranscriptionModel
+    let activeModel: TranscriptionModel
+    let modelIsOverridden: Bool
     let overlayAllowed: Bool
     @ObservedObject var shortcutRecorder: ShortcutRecorderModel
     let onShortcutRecordingChanged: (Bool) -> Void
@@ -158,10 +163,35 @@ private struct GeneralSettingsView: View {
             }
 
             Section("Model") {
-                LabeledContent("Selected model", value: model.displayName)
-                LabeledContent("Identifier", value: model.id)
-                LabeledContent("Languages", value: languageDescription)
-                LabeledContent("Download size", value: "\(model.sizeMB) MB")
+                Picker("Default model", selection: $store.selectedModelID) {
+                    ForEach(ModelRegistry.shared, id: \.id) { model in
+                        Text(model.displayName).tag(model.id)
+                    }
+                }
+
+                LabeledContent("Active now", value: activeModel.displayName)
+                LabeledContent(
+                    "Selected language",
+                    value: selectedModel?.languageMode.displayName ?? "Unknown"
+                )
+                LabeledContent(
+                    "Selected download size",
+                    value: selectedModel.map { "\($0.sizeMB) MB" } ?? "Unknown"
+                )
+
+                if modelIsOverridden {
+                    Text("The --model command-line option overrides the saved model for this run.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if store.selectedModelID != activeModel.id {
+                    Text("Restart Parrot to load the newly selected model.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else if activeModel.languageMode == .automatic {
+                    Text("Language is detected independently for each dictation. Spanish is the primary target; English utterances and occasional English terms remain supported.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
             Section {
@@ -176,8 +206,8 @@ private struct GeneralSettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var languageDescription: String {
-        model.languages == ["multi"] ? "Multilingual" : model.languages.joined(separator: ", ")
+    private var selectedModel: TranscriptionModel? {
+        ModelRegistry.find(store.selectedModelID)
     }
 }
 

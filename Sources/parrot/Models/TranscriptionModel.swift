@@ -5,6 +5,20 @@ enum Engine: String, Codable {
     case parakeet
 }
 
+enum TranscriptionLanguageMode: String, Codable {
+    case automatic
+    case englishOnly
+
+    var displayName: String {
+        switch self {
+        case .automatic:
+            return "Spanish + English (automatic)"
+        case .englishOnly:
+            return "English only"
+        }
+    }
+}
+
 struct TranscriptionModel: Codable {
     let id: String
     let displayName: String
@@ -13,6 +27,7 @@ struct TranscriptionModel: Codable {
     let whisperKitID: String?
     let sizeMB: Int
     let languages: [String]
+    let languageMode: TranscriptionLanguageMode
     let recommended: Bool
 }
 
