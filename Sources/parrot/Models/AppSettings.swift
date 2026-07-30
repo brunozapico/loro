@@ -1,0 +1,173 @@
+import AppKit
+import Combine
+import CoreGraphics
+import Foundation
+
+enum DictationMode: String, Codable, CaseIterable, Identifiable {
+    case pushToTalk
+    case toggle
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .pushToTalk: return "Push to Talk"
+        case .toggle: return "Toggle"
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .pushToTalk:
+            return "Hold the shortcut while speaking, then release it to transcribe."
+        case .toggle:
+            return "Press once to start recording and again to stop and transcribe."
+        }
+    }
+}
+
+struct HotkeyShortcut: Codable, Equatable {
+    let keyCode: UInt16?
+    let modifiers: UInt64
+    let keyLabel: String
+
+    static let functionKey = HotkeyShortcut(
+        keyCode: nil,
+        modifiers: CGEventFlags.maskSecondaryFn.rawValue,
+        keyLabel: ""
+    )
+
+    var isModifierOnly: Bool { keyCode == nil }
+
+    var displayName: String {
+        let flags = CGEventFlags(rawValue: modifiers)
+        var parts: [String] = []
+        if flags.contains(.maskControl) { parts.append("⌃") }
+        if flags.contains(.maskAlternate) { parts.append("⌥") }
+        if flags.contains(.maskShift) { parts.append("⇧") }
+        if flags.contains(.maskCommand) { parts.append("⌘") }
+        if flags.contains(.maskSecondaryFn) { parts.append("fn") }
+        if !keyLabel.isEmpty { parts.append(keyLabel.uppercased()) }
+        return parts.isEmpty ? "Not set" : parts.joined()
+    }
+
+    func matchesModifiers(_ eventFlags: CGEventFlags) -> Bool {
+        Self.normalized(eventFlags) == modifiers
+    }
+
+    func containsModifiers(_ eventFlags: CGEventFlags) -> Bool {
+        let normalized = Self.normalized(eventFlags)
+        return normalized & modifiers == modifiers
+    }
+
+    static func normalized(_ flags: CGEventFlags) -> UInt64 {
+        flags.rawValue & supportedModifierMask.rawValue
+    }
+
+    static func normalized(_ flags: NSEvent.ModifierFlags) -> UInt64 {
+        normalized(CGEventFlags(rawValue: UInt64(flags.rawValue)))
+    }
+
+    static let supportedModifierMask: CGEventFlags = [
+        .maskControl,
+        .maskAlternate,
+        .maskShift,
+        .maskCommand,
+        .maskSecondaryFn,
+    ]
+}
+
+struct AppSettings: Equatable {
+    var shortcut: HotkeyShortcut
+    var dictationMode: DictationMode
+    var showOverlay: Bool
+}
+
+@MainActor
+final class SettingsStore: ObservableObject {
+    private enum Key {
+        static let shortcut = "shortcut"
+        static let dictationMode = "dictationMode"
+        static let showOverlay = "showOverlay"
+    }
+
+    private let defaults: UserDefaults
+    var onChange: ((AppSettings) -> Void)?
+
+    @Published var shortcut: HotkeyShortcut {
+        didSet {
+            guard shortcut != oldValue else { return }
+            persistShortcut()
+            notifyChange()
+        }
+    }
+
+    @Published var dictationMode: DictationMode {
+        didSet {
+            guard dictationMode != oldValue else { return }
+            defaults.set(dictationMode.rawValue, forKey: Key.dictationMode)
+            notifyChange()
+        }
+    }
+
+    @Published var showOverlay: Bool {
+        didSet {
+            guard showOverlay != oldValue else { return }
+            defaults.set(showOverlay, forKey: Key.showOverlay)
+            notifyChange()
+        }
+    }
+
+    init(defaults: UserDefaults? = nil) {
+        let defaults = defaults ?? UserDefaults(suiteName: "com.digimata.parrot")!
+        self.defaults = defaults
+
+        if
+            let data = defaults.data(forKey: Key.shortcut),
+            let decoded = try? JSONDecoder().decode(HotkeyShortcut.self, from: data)
+        {
+            shortcut = decoded
+        } else {
+            shortcut = .functionKey
+        }
+
+        if
+            let rawMode = defaults.string(forKey: Key.dictationMode),
+            let mode = DictationMode(rawValue: rawMode)
+        {
+            dictationMode = mode
+        } else {
+            dictationMode = .pushToTalk
+        }
+
+        if defaults.object(forKey: Key.showOverlay) == nil {
+            showOverlay = true
+        } else {
+            showOverlay = defaults.bool(forKey: Key.showOverlay)
+        }
+    }
+
+    var current: AppSettings {
+        AppSettings(
+            shortcut: shortcut,
+            dictationMode: dictationMode,
+            showOverlay: showOverlay
+        )
+    }
+
+    func resetToDefaults() {
+        shortcut = .functionKey
+        dictationMode = .pushToTalk
+        showOverlay = true
+    }
+
+    private func persistShortcut() {
+        if let data = try? JSONEncoder().encode(shortcut) {
+            defaults.set(data, forKey: Key.shortcut)
+        }
+    }
+
+    private func notifyChange() {
+        onChange?(current)
+    }
+}

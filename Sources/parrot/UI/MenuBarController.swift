@@ -5,19 +5,33 @@ import AppKit
 /// (since we run as `.accessory` — no dock icon, no main window).
 @MainActor
 final class MenuBarController {
+    private enum State {
+        case idle
+        case recording
+        case transcribing
+        case error
+    }
+
     private let statusItem: NSStatusItem
     private let modelLabel: NSMenuItem
     private let stateLabel: NSMenuItem
     private let modelID: String
+    private let onOpenSettings: () -> Void
+    private var shortcut: HotkeyShortcut
+    private var dictationMode: DictationMode
+    private var state: State = .idle
 
-    init(modelID: String) {
+    init(modelID: String, settings: AppSettings, onOpenSettings: @escaping () -> Void) {
         self.modelID = modelID
+        self.shortcut = settings.shortcut
+        self.dictationMode = settings.dictationMode
+        self.onOpenSettings = onOpenSettings
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let menu = NSMenu()
         menu.autoenablesItems = false
 
-        stateLabel = NSMenuItem(title: "idle · hold fn to dictate", action: nil, keyEquivalent: "")
+        stateLabel = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         stateLabel.isEnabled = false
         menu.addItem(stateLabel)
 
@@ -26,6 +40,14 @@ final class MenuBarController {
         menu.addItem(modelLabel)
 
         menu.addItem(.separator())
+
+        let settingsItem = NSMenuItem(
+            title: "Settings…",
+            action: #selector(settingsClicked),
+            keyEquivalent: ","
+        )
+        settingsItem.target = self
+        menu.addItem(settingsItem)
 
         let quit = NSMenuItem(
             title: "Quit parrot",
@@ -36,19 +58,41 @@ final class MenuBarController {
         menu.addItem(quit)
 
         statusItem.menu = menu
+        updateIdleLabel()
         configureButton(recording: false)
     }
 
     func setRecording(_ recording: Bool) {
-        stateLabel.title = recording ? "● recording" : "idle · hold fn to dictate"
+        if recording {
+            state = .recording
+            stateLabel.title = "● recording"
+        } else {
+            state = .idle
+            updateIdleLabel()
+        }
     }
 
     func setTranscribing() {
+        state = .transcribing
         stateLabel.title = "transcribing…"
     }
 
     func setError(_ message: String) {
+        state = .error
         stateLabel.title = message
+    }
+
+    func apply(_ settings: AppSettings) {
+        shortcut = settings.shortcut
+        dictationMode = settings.dictationMode
+        if state == .idle {
+            updateIdleLabel()
+        }
+    }
+
+    private func updateIdleLabel() {
+        let action = dictationMode == .pushToTalk ? "hold" : "press"
+        stateLabel.title = "idle · \(action) \(shortcut.displayName) to dictate"
     }
 
     private func configureButton(recording: Bool) {
@@ -80,6 +124,10 @@ final class MenuBarController {
         // Menu-bar status icons are nominally 18pt tall; size the SVG to match.
         image.size = NSSize(width: 16, height: 16)
         return image
+    }
+
+    @objc private func settingsClicked() {
+        onOpenSettings()
     }
 
     @objc private func quitClicked() {

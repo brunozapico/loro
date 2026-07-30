@@ -6,7 +6,7 @@ A minimal macOS dictation daemon. Push-to-talk, on-device transcription, text in
 
 ```sh
 curl -fsSL https://digimata.github.io/parrot/install.sh | sh
-parrot setup                       # grants mic + accessibility, downloads the model
+parrot setup                       # grants microphone + accessibility
 parrot install --launch-at-login   # optional — runs in the background on login
 ```
 
@@ -21,9 +21,20 @@ The installer drops the binary in `/usr/local/bin/parrot`. Builds are unsigned f
 3. **Hold the `fn` key, speak, release.** A small pill appears at the bottom of the screen while the mic is hot.
 4. **The transcript types itself in at the cursor** when you release. Usually within 200-300ms.
 
-That's it. There is no record button, no stop button, no "send" — `fn` is the whole interface.
+That's it. There is no record button and no "send" — your global shortcut is the dictation interface.
 
-> **Note:** on most modern Macs the `fn` key is the bottom-left key. If yours is set to "Change input source" or "Show emoji & symbols," `parrot setup` will tell you how to flip it back to plain `fn`.
+> **Note:** on most modern Macs the `fn` key is the bottom-left key. If yours is set to "Change input source" or "Show emoji & symbols," `parrot doctor` will tell you how to flip it back to plain `fn`.
+
+## Settings
+
+Open the bird icon in the menu bar and choose **Settings…**. Changes apply immediately and persist across launches.
+
+- **Global shortcut** — click the shortcut field and press any key or modifier combination. `fn` remains the default.
+- **Activation** — choose **Push to Talk** (hold to record) or **Toggle** (press once to start, again to stop).
+- **Recording overlay** — show or hide the waveform pill.
+- **Selected model** — see the active model, identifier, languages, and download size.
+
+The selected model remains controlled by `--model`; changing models from the GUI is not yet supported.
 
 ## Privacy
 
@@ -39,15 +50,14 @@ Parrot connects to Hugging Face only to download the selected WhisperKit model. 
 
 ```sh
 parrot                                 # run in the foreground (^C to quit)
-parrot setup                           # one-time setup: permissions + model download
+parrot setup                           # one-time permission setup
 parrot install --launch-at-login       # register a LaunchAgent (background daemon)
 parrot install --uninstall             # remove the LaunchAgent
 parrot doctor                          # check permissions + fn key setting
 parrot models list                     # list available models
 parrot models download <id>            # pre-download a model
 parrot --model whisper-large-v3-turbo  # bigger, multilingual, slower first-run
-parrot --hotkey right-option           # change the push-to-talk key
-parrot --no-overlay                    # disable the bottom-of-screen pill
+parrot --no-overlay                    # override the overlay setting for this run
 ```
 
 ## Stack

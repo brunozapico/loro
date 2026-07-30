@@ -7,7 +7,7 @@ import WhisperKit
 struct Parrot: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "parrot",
-        abstract: "Minimal macOS dictation daemon. Hold Fn, speak, release.",
+        abstract: "Minimal macOS dictation daemon with a configurable global shortcut.",
         subcommands: [Run.self, Setup.self, Doctor.self, Models.self, Install.self],
         defaultSubcommand: Run.self
     )
@@ -29,8 +29,11 @@ struct Run: ParsableCommand {
     var model: String?
 
     func run() throws {
+        let settingsStore = MainActor.assumeIsolated { SettingsStore() }
+        let initialSettings = MainActor.assumeIsolated { settingsStore.current }
+
         if !skipDoctor {
-            let checks = DoctorReport.run()
+            let checks = DoctorReport.run(shortcut: initialSettings.shortcut)
             if !DoctorReport.allOK(checks) {
                 DoctorReport.print(checks)
                 throw ValidationError("Startup checks failed. Fix the issues above or pass --skip-doctor.")
@@ -69,58 +72,56 @@ struct Run: ParsableCommand {
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor()
+        let monitor = HotkeyMonitor(shortcut: initialSettings.shortcut)
         let capture = AudioCapture()
-        let overlay: RecordingOverlay? = noOverlay ? nil : MainActor.assumeIsolated { RecordingOverlay() }
-        if let overlay {
-            capture.onLevel = { level in overlay.pushLevel(level) }
+        let overlay = MainActor.assumeIsolated { RecordingOverlay() }
+        capture.onLevel = { level in overlay.pushLevel(level) }
+
+        let settingsWindow = MainActor.assumeIsolated {
+            SettingsWindowController(
+                store: settingsStore,
+                model: chosenModel,
+                overlayAllowed: !noOverlay,
+                onShortcutRecordingChanged: { isRecording in
+                    monitor.setEnabled(!isRecording)
+                }
+            )
         }
-        let menuBar = MainActor.assumeIsolated { MenuBarController(modelID: chosenModel.id) }
+        let menuBar = MainActor.assumeIsolated {
+            MenuBarController(
+                modelID: chosenModel.id,
+                settings: initialSettings,
+                onOpenSettings: { settingsWindow.show() }
+            )
+        }
+        let dictation = MainActor.assumeIsolated {
+            DictationController(
+                capture: capture,
+                transcriber: transcriber,
+                overlay: overlay,
+                menuBar: menuBar,
+                settings: initialSettings,
+                overlayAllowed: !noOverlay
+            )
+        }
+
+        MainActor.assumeIsolated {
+            var appliedSettings = initialSettings
+            settingsStore.onChange = { settings in
+                if settings.shortcut != appliedSettings.shortcut {
+                    dictation.finishActiveRecording()
+                    monitor.updateShortcut(settings.shortcut)
+                }
+                dictation.apply(settings)
+                menuBar.apply(settings)
+                appliedSettings = settings
+            }
+        }
 
         do {
             try monitor.start { event in
-                switch event {
-                case .pressed:
-                    do {
-                        try capture.start()
-                        MainActor.assumeIsolated {
-                            overlay?.show(.recording)
-                            menuBar.setRecording(true)
-                        }
-                    } catch {
-                        MainActor.assumeIsolated {
-                            overlay?.hide()
-                            menuBar.setError("microphone capture failed")
-                        }
-                    }
-                case .released:
-                    let samples = capture.stop()
-                    MainActor.assumeIsolated {
-                        overlay?.show(.transcribing)
-                        menuBar.setTranscribing()
-                    }
-                    guard !samples.isEmpty else {
-                        MainActor.assumeIsolated {
-                            overlay?.hide()
-                            menuBar.setRecording(false)
-                        }
-                        return
-                    }
-                    Task {
-                        do {
-                            let text = try await transcriber.transcribe(samples)
-                            await MainActor.run {
-                                TextInjector.inject(text)
-                                overlay?.hide()
-                                menuBar.setRecording(false)
-                            }
-                        } catch {
-                            await MainActor.run {
-                                overlay?.hide()
-                                menuBar.setError("transcription failed")
-                            }
-                        }
-                    }
+                MainActor.assumeIsolated {
+                    dictation.handle(event)
                 }
             }
         } catch {
@@ -141,11 +142,12 @@ struct Run: ParsableCommand {
 
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Check microphone, accessibility, and Fn key configuration."
+        abstract: "Check microphone, accessibility, and shortcut configuration."
     )
 
     func run() throws {
-        let checks = DoctorReport.run()
+        let shortcut = MainActor.assumeIsolated { SettingsStore().current.shortcut }
+        let checks = DoctorReport.run(shortcut: shortcut)
         DoctorReport.print(checks)
         if !DoctorReport.allOK(checks) {
             throw ExitCode(1)
