@@ -13,6 +13,7 @@ final class DictationController {
 
     private var mode: DictationMode
     private var showOverlay: Bool
+    private var replacementRules: [ReplacementRule]
     private var isRecording = false
     private var isTranscribing = false
 
@@ -30,6 +31,7 @@ final class DictationController {
         self.menuBar = menuBar
         self.mode = settings.dictationMode
         self.showOverlay = settings.showOverlay
+        self.replacementRules = settings.replacementRules
         self.overlayAllowed = overlayAllowed
     }
 
@@ -56,6 +58,7 @@ final class DictationController {
         }
         mode = settings.dictationMode
         showOverlay = settings.showOverlay
+        replacementRules = settings.replacementRules
         if isRecording, overlayIsEnabled {
             overlay.show(.recording)
         } else if isTranscribing, overlayIsEnabled {
@@ -110,13 +113,15 @@ final class DictationController {
             overlay.hide()
         }
         menuBar.setTranscribing()
+        let replacementRules = replacementRules
 
         Task { [weak self, transcriber] in
             do {
                 let text = try await transcriber.transcribe(samples)
                 guard let self else { return }
                 self.isTranscribing = false
-                TextInjector.inject(text)
+                let processedText = TextReplacementEngine.apply(replacementRules, to: text)
+                TextInjector.inject(processedText)
                 self.overlay.hide()
                 self.menuBar.setRecording(false)
             } catch {

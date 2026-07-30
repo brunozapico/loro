@@ -81,6 +81,7 @@ struct AppSettings: Equatable {
     var shortcut: HotkeyShortcut
     var dictationMode: DictationMode
     var showOverlay: Bool
+    var replacementRules: [ReplacementRule]
 }
 
 @MainActor
@@ -89,6 +90,7 @@ final class SettingsStore: ObservableObject {
         static let shortcut = "shortcut"
         static let dictationMode = "dictationMode"
         static let showOverlay = "showOverlay"
+        static let replacementRules = "replacementRules"
     }
 
     private let defaults: UserDefaults
@@ -114,6 +116,14 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard showOverlay != oldValue else { return }
             defaults.set(showOverlay, forKey: Key.showOverlay)
+            notifyChange()
+        }
+    }
+
+    @Published var replacementRules: [ReplacementRule] {
+        didSet {
+            guard replacementRules != oldValue else { return }
+            persistReplacementRules()
             notifyChange()
         }
     }
@@ -145,25 +155,49 @@ final class SettingsStore: ObservableObject {
         } else {
             showOverlay = defaults.bool(forKey: Key.showOverlay)
         }
+
+        if
+            let data = defaults.data(forKey: Key.replacementRules),
+            let decoded = try? JSONDecoder().decode([ReplacementRule].self, from: data)
+        {
+            replacementRules = decoded
+        } else {
+            replacementRules = []
+        }
     }
 
     var current: AppSettings {
         AppSettings(
             shortcut: shortcut,
             dictationMode: dictationMode,
-            showOverlay: showOverlay
+            showOverlay: showOverlay,
+            replacementRules: replacementRules
         )
     }
 
-    func resetToDefaults() {
+    func resetGeneralSettings() {
         shortcut = .functionKey
         dictationMode = .pushToTalk
         showOverlay = true
     }
 
+    func addReplacementRule() {
+        replacementRules.append(ReplacementRule())
+    }
+
+    func removeReplacementRule(id: ReplacementRule.ID) {
+        replacementRules.removeAll { $0.id == id }
+    }
+
     private func persistShortcut() {
         if let data = try? JSONEncoder().encode(shortcut) {
             defaults.set(data, forKey: Key.shortcut)
+        }
+    }
+
+    private func persistReplacementRules() {
+        if let data = try? JSONEncoder().encode(replacementRules) {
+            defaults.set(data, forKey: Key.replacementRules)
         }
     }
 

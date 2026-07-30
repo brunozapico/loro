@@ -1,24 +1,38 @@
 import AppKit
 import SwiftUI
 
+enum SettingsTab: Hashable {
+    case general
+    case dictionary
+    case permissions
+}
+
 @MainActor
 final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let shortcutRecorder: ShortcutRecorderModel
+    private let navigation: SettingsNavigationModel
+    private let permissionManager: PermissionManager
 
     init(
         store: SettingsStore,
         model: TranscriptionModel,
+        permissionManager: PermissionManager,
         overlayAllowed: Bool,
         onShortcutRecordingChanged: @escaping (Bool) -> Void
     ) {
         let shortcutRecorder = ShortcutRecorderModel()
+        let navigation = SettingsNavigationModel()
         self.shortcutRecorder = shortcutRecorder
+        self.navigation = navigation
+        self.permissionManager = permissionManager
 
         let rootView = SettingsView(
             store: store,
             model: model,
+            permissionManager: permissionManager,
             overlayAllowed: overlayAllowed,
             shortcutRecorder: shortcutRecorder,
+            navigation: navigation,
             onShortcutRecordingChanged: onShortcutRecordingChanged
         )
         let hostingController = NSHostingController(rootView: rootView)
@@ -26,7 +40,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         window.title = "Parrot Settings"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 480, height: 430))
+        window.setContentSize(NSSize(width: 560, height: 500))
         window.center()
 
         super.init(window: window)
@@ -38,8 +52,12 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func show() {
+    func show(tab: SettingsTab? = nil) {
         guard let window else { return }
+        if let tab {
+            navigation.selectedTab = tab
+        }
+        permissionManager.refresh()
         NSApp.activate(ignoringOtherApps: true)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -51,7 +69,51 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     }
 }
 
+@MainActor
+private final class SettingsNavigationModel: ObservableObject {
+    @Published var selectedTab: SettingsTab = .general
+}
+
 private struct SettingsView: View {
+    @ObservedObject var store: SettingsStore
+    let model: TranscriptionModel
+    @ObservedObject var permissionManager: PermissionManager
+    let overlayAllowed: Bool
+    @ObservedObject var shortcutRecorder: ShortcutRecorderModel
+    @ObservedObject var navigation: SettingsNavigationModel
+    let onShortcutRecordingChanged: (Bool) -> Void
+
+    var body: some View {
+        TabView(selection: $navigation.selectedTab) {
+            GeneralSettingsView(
+                store: store,
+                model: model,
+                overlayAllowed: overlayAllowed,
+                shortcutRecorder: shortcutRecorder,
+                onShortcutRecordingChanged: onShortcutRecordingChanged
+            )
+            .tabItem {
+                Label("General", systemImage: "gearshape")
+            }
+            .tag(SettingsTab.general)
+
+            DictionarySettingsView(store: store)
+                .tabItem {
+                    Label("Dictionary", systemImage: "character.book.closed")
+                }
+                .tag(SettingsTab.dictionary)
+
+            PermissionsSettingsView(permissionManager: permissionManager)
+                .tabItem {
+                    Label("Permissions", systemImage: "lock.shield")
+                }
+                .tag(SettingsTab.permissions)
+        }
+        .frame(width: 560, height: 500)
+    }
+}
+
+private struct GeneralSettingsView: View {
     @ObservedObject var store: SettingsStore
     let model: TranscriptionModel
     let overlayAllowed: Bool
@@ -106,17 +168,210 @@ private struct SettingsView: View {
                 HStack {
                     Spacer()
                     Button("Restore Defaults") {
-                        store.resetToDefaults()
+                        store.resetGeneralSettings()
                     }
                 }
             }
         }
         .formStyle(.grouped)
-        .frame(width: 480, height: 430)
     }
 
     private var languageDescription: String {
         model.languages == ["multi"] ? "Multilingual" : model.languages.joined(separator: ", ")
+    }
+}
+
+private struct DictionarySettingsView: View {
+    @ObservedObject var store: SettingsStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Custom replacements")
+                    .font(.title3.weight(.semibold))
+                Text("Replace words or phrases after transcription and before Parrot types them.")
+                    .foregroundStyle(.secondary)
+            }
+
+            if store.replacementRules.isEmpty {
+                VStack(spacing: 8) {
+                    Image(systemName: "character.book.closed")
+                        .font(.system(size: 32))
+                        .foregroundStyle(.secondary)
+                    Text("No replacements yet")
+                        .font(.headline)
+                    Text("For example: “te paso mi mail” → “name@example.com”")
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                HStack(spacing: 10) {
+                    Text("When the transcript contains")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Text("Replace it with")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Color.clear.frame(width: 24)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+                ScrollView {
+                    LazyVStack(spacing: 8) {
+                        ForEach($store.replacementRules) { $rule in
+                            HStack(spacing: 10) {
+                                TextField("Spoken word or phrase", text: $rule.spokenPhrase)
+                                    .textFieldStyle(.roundedBorder)
+                                Image(systemName: "arrow.right")
+                                    .foregroundStyle(.secondary)
+                                TextField("Text to type", text: $rule.replacement)
+                                    .textFieldStyle(.roundedBorder)
+                                Button {
+                                    store.removeReplacementRule(id: rule.id)
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .foregroundStyle(.red)
+                                .help("Remove replacement")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            HStack {
+                Button {
+                    store.addReplacementRule()
+                } label: {
+                    Label("Add Replacement", systemImage: "plus")
+                }
+                Spacer()
+                Text("Stored only in local app preferences.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(22)
+    }
+}
+
+private struct PermissionsSettingsView: View {
+    @ObservedObject var permissionManager: PermissionManager
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Permissions")
+                    .font(.title3.weight(.semibold))
+                Text("Parrot needs both permissions for global dictation and text injection.")
+                    .foregroundStyle(.secondary)
+            }
+
+            PermissionRow(
+                title: "Microphone",
+                granted: permissionManager.microphoneGranted,
+                detail: microphoneDetail,
+                actionTitle: microphoneActionTitle,
+                action: microphoneAction
+            )
+
+            PermissionRow(
+                title: "Accessibility",
+                granted: permissionManager.accessibilityGranted,
+                detail: permissionManager.accessibilityGranted
+                    ? "Global shortcut and text injection are enabled."
+                    : "Required to detect the shortcut and type at the cursor.",
+                actionTitle: permissionManager.accessibilityGranted ? nil : "Open Settings",
+                action: permissionManager.openAccessibilitySettings
+            )
+
+            Spacer()
+
+            HStack {
+                Button {
+                    permissionManager.refresh()
+                } label: {
+                    Label("Refresh", systemImage: "arrow.clockwise")
+                }
+                Spacer()
+                Text("After changing System Settings, return here and refresh.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(22)
+        .onAppear {
+            permissionManager.refresh()
+        }
+    }
+
+    private var microphoneDetail: String {
+        switch permissionManager.microphoneStatus {
+        case .authorized:
+            return "Audio capture is enabled while dictation is active."
+        case .notDetermined:
+            return "macOS has not asked for microphone access yet."
+        case .denied:
+            return "Microphone access was denied in System Settings."
+        case .restricted:
+            return "Microphone access is restricted on this Mac."
+        @unknown default:
+            return "The microphone permission state is unknown."
+        }
+    }
+
+    private var microphoneActionTitle: String? {
+        switch permissionManager.microphoneStatus {
+        case .authorized:
+            return nil
+        case .notDetermined:
+            return "Request Access"
+        case .denied, .restricted:
+            return "Open Settings"
+        @unknown default:
+            return "Open Settings"
+        }
+    }
+
+    private var microphoneAction: () -> Void {
+        permissionManager.microphoneStatus == .notDetermined
+            ? permissionManager.requestMicrophone
+            : permissionManager.openMicrophoneSettings
+    }
+}
+
+private struct PermissionRow: View {
+    let title: String
+    let granted: Bool
+    let detail: String
+    let actionTitle: String?
+    let action: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
+                .font(.title2)
+                .foregroundStyle(granted ? .green : .red)
+                .accessibilityLabel(granted ? "Granted" : "Not granted")
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.headline)
+                Text(detail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if let actionTitle {
+                Button(actionTitle, action: action)
+            }
+        }
+        .padding(14)
+        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

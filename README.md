@@ -33,6 +33,8 @@ Open the bird icon in the menu bar and choose **Settings…**. Changes apply imm
 - **Activation** — choose **Push to Talk** (hold to record) or **Toggle** (press once to start, again to stop).
 - **Recording overlay** — show or hide the waveform pill.
 - **Selected model** — see the active model, identifier, languages, and download size.
+- **Custom dictionary** — replace spoken words or phrases with exact text, such as `te paso mi mail` → `name@example.com`.
+- **Permissions** — see microphone and Accessibility status and jump directly to the relevant System Settings pane.
 
 The selected model remains controlled by `--model`; changing models from the GUI is not yet supported.
 
@@ -41,6 +43,7 @@ The selected model remains controlled by `--model`; changing models from the GUI
 - Audio exists only in memory while recording and transcription are in progress. Parrot never writes it to disk.
 - Transcripts are injected directly at the cursor. Parrot does not log, store, or retain them.
 - There is no transcript history, clipboard history, telemetry, or cloud transcription.
+- Custom replacement rules are stored locally in app preferences because they are user configuration; they are never sent anywhere.
 - When running as a LaunchAgent, stdout and stderr are discarded through `/dev/null`.
 - Installing or uninstalling the LaunchAgent removes legacy Parrot log and WAV files from `/tmp`.
 

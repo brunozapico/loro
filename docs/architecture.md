@@ -152,22 +152,25 @@ The registry is the single source of truth for model identifiers, display names,
 
 ### `SettingsStore` + `SettingsWindowController`
 
-The menu bar's **Settings…** item opens a native SwiftUI form hosted in an `NSWindow`. `SettingsStore` persists only non-sensitive preferences in the `com.digimata.parrot` `UserDefaults` suite:
+The menu bar's **Settings…** item opens a native tabbed SwiftUI interface hosted in an `NSWindow`. `SettingsStore` persists user configuration in the `com.digimata.parrot` `UserDefaults` suite:
 
 - global shortcut key code, modifier mask, and display label
 - activation mode (`pushToTalk` or `toggle`)
 - whether to show the recording overlay
+- custom spoken-phrase replacement rules
 
-Changes apply immediately. The active transcription model is shown read-only because model selection and loading still happen at process startup through `--model`. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
+Changes apply immediately. Replacement rules may contain personal values such as email addresses, so the UI explicitly identifies them as local preferences; they never enter logs or network requests. The active transcription model is shown read-only because model selection and loading still happen at process startup through `--model`. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
 
 ## Permissions
 
-Two prompts on first run, both surfaced via `parrot doctor`:
+Two permissions are required and surfaced both through `parrot doctor` and the GUI's **Permissions** tab:
 
 1. **Microphone** — standard `AVCaptureDevice` request, fires on first audio engine start.
 2. **Accessibility** — required for `CGEventTap` (hotkey) and `CGEvent` posting (text injection). User toggles in System Settings → Privacy & Security → Accessibility, granting the *terminal* (or whatever launched parrot) permission, since the binary inherits its parent's TCC identity.
 
-`parrot doctor` checks both and prints actionable next steps if either is missing. Without these, the daemon refuses to start.
+`PermissionManager` refreshes both states whenever the app becomes active. Missing permissions no longer prevent the menu bar and settings window from starting: Parrot opens the Permissions tab, shows a clear granted/missing state, and links directly to the matching System Settings pane. When Accessibility becomes available, the global shortcut monitor starts without requiring a process restart.
+
+`parrot doctor` remains available for terminal-based diagnostics and prints actionable next steps.
 
 ### TCC quirk worth knowing
 
@@ -192,8 +195,8 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 ## Data flow, end-to-end
 
 1. User runs `parrot` in a terminal.
-2. `ParrotCLI` loads persisted settings, validates the permissions relevant to the selected shortcut, and instantiates modules.
-3. Sets `.accessory` activation policy and enters `NSApp.run()`. Status: `listening`. Overlay hidden.
+2. `ParrotCLI` loads persisted settings and instantiates modules.
+3. Sets `.accessory` activation policy and enters `NSApp.run()`. Missing permissions are presented in the settings window instead of terminating the process.
 4. User activates the configured shortcut.
 5. `HotkeyMonitor` fires `.pressed`. According to the selected mode, `DictationController` starts recording immediately or toggles the current recording state.
 6. `AudioCapture` starts the AVAudioEngine tap. Buffers fill. Overlay animates mic level.
@@ -201,9 +204,10 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 8. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
 10. `Transcriber` runs CoreML inference. Returns string.
-11. `TextInjector` posts the string at the cursor.
-12. Overlay hides. Status: `listening`. Loop.
-13. User hits `^C`. Process exits cleanly.
+11. `TextReplacementEngine` applies the configured local phrase substitutions in memory.
+12. `TextInjector` posts the resulting string at the cursor.
+13. Overlay hides. Status: `listening`. Loop.
+14. User hits `^C`. Process exits cleanly.
 
 End-to-end latency target: <500 ms after recording stops for utterances under 10 seconds, on Apple Silicon.
 
@@ -213,7 +217,7 @@ End-to-end latency target: <500 ms after recording stops for utterances under 10
 - No VAD-based hands-free mode. Push-to-talk is more reliable and uses zero idle CPU.
 - No history, transcript log, audio dump, telemetry, or clipboard manager. Output goes to the cursor and that's it.
 - LaunchAgent output is discarded through `/dev/null`; no persistent daemon log is created.
-- No custom vocabulary, prompts, or post-processing.
+- No model-level custom vocabulary, prompting, or AI post-processing. User-defined replacements are deterministic local string substitutions.
 - No transcript editor, history browser, or general preferences application. UI remains limited to the menu bar, focused settings window, and recording overlay.
 
 These are deliberate cuts. Each can be revisited if real usage demands it.
@@ -239,7 +243,11 @@ parrot/
     Models/
       AppSettings.swift         # persisted shortcut, mode, and overlay preference
       ModelRegistry.swift
+      TextReplacement.swift     # custom replacement model + in-memory engine
       TranscriptionModel.swift  # Codable types
+
+    Permissions/
+      PermissionManager.swift   # live TCC status + System Settings links
 
     Audio/
       AudioCapture.swift        # AVAudioEngine tap + ring buffer

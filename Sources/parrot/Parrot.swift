@@ -32,14 +32,6 @@ struct Run: ParsableCommand {
         let settingsStore = MainActor.assumeIsolated { SettingsStore() }
         let initialSettings = MainActor.assumeIsolated { settingsStore.current }
 
-        if !skipDoctor {
-            let checks = DoctorReport.run(shortcut: initialSettings.shortcut)
-            if !DoctorReport.allOK(checks) {
-                DoctorReport.print(checks)
-                throw ValidationError("Startup checks failed. Fix the issues above or pass --skip-doctor.")
-            }
-        }
-
         let chosenModel: TranscriptionModel
         if let id = model {
             guard let m = ModelRegistry.find(id) else {
@@ -75,12 +67,14 @@ struct Run: ParsableCommand {
         let monitor = HotkeyMonitor(shortcut: initialSettings.shortcut)
         let capture = AudioCapture()
         let overlay = MainActor.assumeIsolated { RecordingOverlay() }
+        let permissionManager = MainActor.assumeIsolated { PermissionManager() }
         capture.onLevel = { level in overlay.pushLevel(level) }
 
         let settingsWindow = MainActor.assumeIsolated {
             SettingsWindowController(
                 store: settingsStore,
                 model: chosenModel,
+                permissionManager: permissionManager,
                 overlayAllowed: !noOverlay,
                 onShortcutRecordingChanged: { isRecording in
                     monitor.setEnabled(!isRecording)
@@ -118,14 +112,40 @@ struct Run: ParsableCommand {
             }
         }
 
-        do {
-            try monitor.start { event in
+        let startHotkeyMonitoring = {
+            guard !monitor.isRunning else { return }
+            do {
+                try monitor.start { event in
+                    MainActor.assumeIsolated {
+                        dictation.handle(event)
+                    }
+                }
+            } catch {
                 MainActor.assumeIsolated {
-                    dictation.handle(event)
+                    settingsWindow.show(tab: .permissions)
                 }
             }
-        } catch {
-            throw ValidationError("Failed to register the hotkey. Run `parrot setup` and try again.")
+        }
+
+        MainActor.assumeIsolated {
+            permissionManager.onStatusChange = {
+                if permissionManager.accessibilityGranted {
+                    startHotkeyMonitoring()
+                } else {
+                    dictation.finishActiveRecording()
+                    monitor.stop()
+                }
+            }
+        }
+
+        startHotkeyMonitoring()
+        let shouldShowPermissions = MainActor.assumeIsolated {
+            !skipDoctor && !permissionManager.allRequiredPermissionsGranted
+        }
+        if shouldShowPermissions {
+            DispatchQueue.main.async {
+                settingsWindow.show(tab: .permissions)
+            }
         }
 
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)

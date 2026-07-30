@@ -16,16 +16,17 @@ final class HotkeyMonitor {
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
 
+    var isRunning: Bool { tap != nil }
+
     init(shortcut: HotkeyShortcut = .functionKey) {
         self.shortcut = shortcut
     }
 
     func start(onEvent: @escaping (Event) -> Void) throws {
+        guard tap == nil else { return }
         self.onEvent = onEvent
 
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        let trusted = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
-        if !trusted {
+        if !AXIsProcessTrusted() {
             throw HotkeyError.tapCreateFailed
         }
 
