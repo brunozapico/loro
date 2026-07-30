@@ -1,17 +1,17 @@
 import ArgumentParser
 import Foundation
 
-/// Manage parrot's LaunchAgent so the daemon starts at login.
+/// Manage Loro's LaunchAgent so the daemon starts at login.
 ///
 /// We deliberately do NOT use SMAppService.mainApp here — that requires a full
-/// .app bundle. Since parrot ships as a single binary in /usr/local/bin, a
+/// .app bundle. Since Loro ships as a single binary in /usr/local/bin, a
 /// plain LaunchAgent plist is the simpler, more honest mechanism.
 struct Install: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Install or remove the launch-at-login LaunchAgent."
     )
 
-    @Flag(name: .long, help: "Register parrot to start at login.")
+    @Flag(name: .long, help: "Register Loro to start at login.")
     var launchAtLogin: Bool = false
 
     @Flag(name: .long, help: "Remove the launch-at-login agent.")
@@ -34,7 +34,8 @@ struct Install: ParsableCommand {
 
     // MARK: -
 
-    private static let label = "com.digimata.parrot"
+    private static let label = "com.brunozapico.loro"
+    private static let legacyLabels = ["com.digimata.parrot"]
     private static let legacyArtifactPaths = [
         "/tmp/parrot.out.log",
         "/tmp/parrot.err.log",
@@ -75,6 +76,7 @@ struct Install: ParsableCommand {
 
         // Best-effort bootstrap; ignore failure if already loaded.
         _ = runLaunchctl(["bootout", "gui/\(uid())", url.path])
+        removeLegacyAgents()
         removeLegacyArtifacts()
         let result = runLaunchctl(["bootstrap", "gui/\(uid())", url.path])
         if result.status != 0 {
@@ -91,15 +93,38 @@ struct Install: ParsableCommand {
 
     private func removeAgent() throws {
         let url = plistURL
+        var removedAgent = false
         if FileManager.default.fileExists(atPath: url.path) {
             _ = runLaunchctl(["bootout", "gui/\(uid())", url.path])
             try FileManager.default.removeItem(at: url)
-            removeLegacyArtifacts()
+            removedAgent = true
+        }
+        if removeLegacyAgents() {
+            removedAgent = true
+        }
+        removeLegacyArtifacts()
+
+        if removedAgent {
             print("✓ launch-at-login removed")
         } else {
-            removeLegacyArtifacts()
             print("nothing to remove (no agent at \(url.path))")
         }
+    }
+
+    /// Remove the pre-Loro LaunchAgent so rebranding cannot leave two daemon
+    /// processes competing for the microphone and global shortcut.
+    @discardableResult
+    private func removeLegacyAgents() -> Bool {
+        let directory = plistURL.deletingLastPathComponent()
+        var removedAgent = false
+        for label in Self.legacyLabels {
+            let url = directory.appendingPathComponent("\(label).plist")
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            _ = runLaunchctl(["bootout", "gui/\(uid())", url.path])
+            try? FileManager.default.removeItem(at: url)
+            removedAgent = true
+        }
+        return removedAgent
     }
 
     /// Remove files created by versions that persisted daemon output or
@@ -111,22 +136,22 @@ struct Install: ParsableCommand {
     }
 
     private func resolveBinaryPath() throws -> String {
-        // /usr/local/bin/parrot is the canonical install path. Honor a real
+        // /usr/local/bin/loro is the canonical install path. Honor a real
         // location if running from elsewhere (e.g. dev).
-        let candidate = "/usr/local/bin/parrot"
+        let candidate = "/usr/local/bin/loro"
         if FileManager.default.isExecutableFile(atPath: candidate) {
             return candidate
         }
         // Fall back to the running executable's resolved path.
-        let argv0 = CommandLine.arguments.first ?? "parrot"
+        let argv0 = CommandLine.arguments.first ?? "loro"
         if argv0.hasPrefix("/"), FileManager.default.isExecutableFile(atPath: argv0) {
             FileHandle.standardError.write(Data(
-                "note: /usr/local/bin/parrot not found; using \(argv0)\n".utf8
+                "note: /usr/local/bin/loro not found; using \(argv0)\n".utf8
             ))
             return argv0
         }
         FileHandle.standardError.write(Data(
-            "couldn't locate the parrot binary. install it to /usr/local/bin/parrot first.\n".utf8
+            "couldn't locate the loro binary. install it to /usr/local/bin/loro first.\n".utf8
         ))
         throw ExitCode(1)
     }

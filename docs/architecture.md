@@ -29,10 +29,10 @@ The binary is a Swift Package executable — `swift build`, `swift run`, ship a 
 ## High-level shape
 
 ```
-$ parrot
+$ loro
                                     ┌──────────────────┐
-                                    │   ParrotCLI      │
-                                    │  (Parrot.swift)  │
+                                    │   LoroCLI      │
+                                    │  (Loro.swift)  │
                                     └────────┬─────────┘
                                              │ wires modules, runs RunLoop
                                              ▼
@@ -74,15 +74,15 @@ $ parrot
 
 ## Modules
 
-### `Parrot.swift` (ParrotCLI)
+### `Loro.swift` (LoroCLI)
 
 Argument parsing (via `swift-argument-parser`), settings loading, and module wiring. Calls `NSApplication.shared.setActivationPolicy(.accessory)` so the process has no dock icon, then runs `NSApp.run()` to drive the menu bar item, settings window, overlay, event tap, and audio engine. Exits cleanly on SIGINT. The daemon does not log recordings, transcripts, keyboard events, or operational status.
 
 Subcommands:
-- `parrot` (default) — run the daemon
-- `parrot models list` — show registered models, mark which are downloaded
-- `parrot models download <id>` — pre-fetch a model
-- `parrot doctor` — check microphone and accessibility permissions, print remediation steps
+- `loro` (default) — run the daemon
+- `loro models list` — show registered models, mark which are downloaded
+- `loro models download <id>` — pre-fetch a model
+- `loro doctor` — check microphone and accessibility permissions, print remediation steps
 
 ### `HotkeyMonitor`
 
@@ -93,7 +93,7 @@ Global shortcut via `CGEventTap` (requires Accessibility permission). Default: *
 - **Push to Talk** — press starts capture, release stops and transcribes.
 - **Toggle** — each press alternates between starting and stopping capture; release is ignored.
 
-**Fn key caveat:** macOS by default maps the Fn (🌐) key to "Show Emoji & Symbols" or "Start Dictation" depending on the user's setting in System Settings → Keyboard → Press 🌐 key to. The CGEventTap sees the keypress regardless, but the system action also fires. `parrot doctor` will detect this setting and instruct the user to change it to "Do Nothing" so Fn becomes a clean modifier.
+**Fn key caveat:** macOS by default maps the Fn (🌐) key to "Show Emoji & Symbols" or "Start Dictation" depending on the user's setting in System Settings → Keyboard → Press 🌐 key to. The CGEventTap sees the keypress regardless, but the system action also fires. `loro doctor` will detect this setting and instruct the user to change it to "Do Nothing" so Fn becomes a clean modifier.
 
 ### `AudioCapture`
 
@@ -171,11 +171,11 @@ enum Engine: String, Codable { case whisperKit, parakeet }
 
 Backed by static values in `ModelRegistry.swift`, keeping the executable self-contained. Adding a model means appending an entry. Adding an engine requires a new `Transcriber` conformance and an `Engine` case.
 
-The registry is the single source of truth for model identifiers, display names, sizes, languages, recommended flags, and what appears in the GUI and `parrot models list`. WhisperKit owns model download and caching.
+The registry is the single source of truth for model identifiers, display names, sizes, languages, recommended flags, and what appears in the GUI and `loro models list`. WhisperKit owns model download and caching.
 
 ### `SettingsStore` + `SettingsWindowController`
 
-The menu bar's **Settings…** item opens a native tabbed SwiftUI interface hosted in an `NSWindow`. `SettingsStore` persists user configuration in the `com.digimata.parrot` `UserDefaults` suite:
+The menu bar's **Settings…** item opens a native tabbed SwiftUI interface hosted in an `NSWindow`. `SettingsStore` persists user configuration in the `com.brunozapico.loro` `UserDefaults` suite and migrates the previous suite once:
 
 - global shortcut key code, modifier mask, and display label
 - activation mode (`pushToTalk` or `toggle`)
@@ -190,22 +190,22 @@ Replacement rules may contain personal values such as email addresses, so the UI
 
 ## Permissions
 
-Two permissions are required and surfaced both through `parrot doctor` and the GUI's **Permissions** tab:
+Two permissions are required and surfaced both through `loro doctor` and the GUI's **Permissions** tab:
 
 1. **Microphone** — standard `AVCaptureDevice` request, fires on first audio engine start.
-2. **Accessibility** — required for `CGEventTap` (hotkey) and `CGEvent` posting (text injection). User toggles in System Settings → Privacy & Security → Accessibility, granting the *terminal* (or whatever launched parrot) permission, since the binary inherits its parent's TCC identity.
+2. **Accessibility** — required for `CGEventTap` (hotkey) and `CGEvent` posting (text injection). User toggles in System Settings → Privacy & Security → Accessibility, granting the *terminal* (or whatever launched Loro) permission, since the binary inherits its parent's TCC identity.
 
-`PermissionManager` refreshes both states whenever the app becomes active. Missing permissions no longer prevent the menu bar and settings window from starting: Parrot opens the Permissions tab, shows a clear granted/missing state, and links directly to the matching System Settings pane. When Accessibility becomes available, the global shortcut monitor starts without requiring a process restart.
+`PermissionManager` refreshes both states whenever the app becomes active. Missing permissions no longer prevent the menu bar and settings window from starting: Loro opens the Permissions tab, shows a clear granted/missing state, and links directly to the matching System Settings pane. When Accessibility becomes available, the global shortcut monitor starts without requiring a process restart.
 
-`parrot doctor` remains available for terminal-based diagnostics and prints actionable next steps.
+`loro doctor` remains available for terminal-based diagnostics and prints actionable next steps.
 
 ### TCC quirk worth knowing
 
-When you launch `parrot` from `Terminal.app`, accessibility permission is granted to *Terminal*, not parrot itself. This means:
+When you launch `loro` from `Terminal.app`, accessibility permission is granted to *Terminal*, not Loro itself. This means:
 - Switching terminals (Terminal → iTerm → Ghostty) requires re-granting permission.
 - Running under `launchd` requires granting permission to whatever spawns it.
 
-This is a macOS platform behavior, not a parrot bug. `parrot doctor` will identify the parent process and tell the user which app needs the permission.
+This is a macOS platform behavior, not a Loro bug. `loro doctor` will identify the parent process and tell the user which app needs the permission.
 
 ## Models — what ships
 
@@ -219,12 +219,12 @@ Spanish-first registry:
 | WhisperKit | `whisper-base.en` | 145 MB | Lightweight English-only fallback |
 | WhisperKit | `whisper-small.en` | 486 MB | Higher-quality English-only fallback |
 
-Models are not bundled. WhisperKit downloads and caches them on first selection or through `parrot models download`. The recommended 626 MB Large v3 variant follows WhisperKit's own recommendation for maximum multilingual accuracy. The English-only entries remain available, but automatic Spanish/English switching requires one of the multilingual entries.
+Models are not bundled. WhisperKit downloads and caches them on first selection or through `loro models download`. The recommended 626 MB Large v3 variant follows WhisperKit's own recommendation for maximum multilingual accuracy. The English-only entries remain available, but automatic Spanish/English switching requires one of the multilingual entries.
 
 ## Data flow, end-to-end
 
-1. User runs `parrot` in a terminal.
-2. `ParrotCLI` loads persisted settings and instantiates modules.
+1. User runs `loro` in a terminal.
+2. `LoroCLI` loads persisted settings and instantiates modules.
 3. Sets `.accessory` activation policy and enters `NSApp.run()`. Missing permissions are presented in the settings window instead of terminating the process.
 4. User activates the configured shortcut.
 5. `HotkeyMonitor` fires `.pressed`. According to the selected mode, `DictationController` starts recording immediately or toggles the current recording state.
@@ -256,10 +256,10 @@ These are deliberate cuts. Each can be revisited if real usage demands it.
 Organized by feature area. These are folders within a single SPM executable target — Swift sees them as one module, but the directory grouping keeps related code together. If a group later earns its keep as a reusable library (e.g. `Transcription` consumed by another tool), it can be promoted to its own SPM target with no rewriting.
 
 ```
-parrot/
+loro/
   Package.swift                 # SPM, single executable target
-  Sources/parrot/
-    Parrot.swift                # entry point, argument parsing, NSApp.run()
+  Sources/loro/
+    Loro.swift                # entry point, argument parsing, NSApp.run()
     DictationController.swift   # push-to-talk/toggle recording lifecycle
     Doctor.swift
     Install.swift
@@ -298,11 +298,11 @@ parrot/
   README.md
 ```
 
-Build: `swift build -c release`. Resulting binary at `.build/release/parrot`. Install: copy to `~/.local/bin/` or `/usr/local/bin/`.
+Build: `swift build -c release`. Resulting binary at `.build/release/loro`. Install: copy to `~/.local/bin/` or `/usr/local/bin/`.
 
 ### On Swift "modules"
 
-Swift's module unit is the **SPM target** (one target = one module = one `import` namespace). For parrot v1 we use a single executable target with the folder structure above; everything is in the same module so no `import` statements between files. If we ever want enforced boundaries (e.g. `Transcription` and `UI` shouldn't reach into `Audio` internals), we promote folders to separate targets in `Package.swift` — a structural change, not a semantic one.
+Swift's module unit is the **SPM target** (one target = one module = one `import` namespace). For Loro v1 we use a single executable target with the folder structure above; everything is in the same module so no `import` statements between files. If we ever want enforced boundaries (e.g. `Transcription` and `UI` shouldn't reach into `Audio` internals), we promote folders to separate targets in `Package.swift` — a structural change, not a semantic one.
 
 ## Open questions
 

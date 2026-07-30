@@ -36,7 +36,7 @@ enum DoctorReport {
             return Check(
                 name: "microphone",
                 status: .warn("not yet requested — will prompt on first recording"),
-                remediation: "open Parrot Settings → Permissions → Request Access"
+                remediation: "open Loro Settings → Permissions → Request Access"
             )
         case .denied, .restricted:
             return Check(
@@ -165,7 +165,7 @@ enum DoctorReport {
         }
     }
 
-    /// True only if every check passed cleanly (used by `parrot doctor` exit code).
+    /// True only if every check passed cleanly (used by `loro doctor` exit code).
     static func allClean(_ checks: [Check]) -> Bool {
         checks.allSatisfy {
             if case .ok = $0.status { return true }

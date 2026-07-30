@@ -4,10 +4,10 @@ import Foundation
 import WhisperKit
 
 @main
-struct Parrot: ParsableCommand {
+struct Loro: ParsableCommand {
     static let configuration = CommandConfiguration(
-        commandName: "parrot",
-        abstract: "Minimal macOS dictation daemon with a configurable global shortcut.",
+        commandName: "loro",
+        abstract: "Spanish-first macOS dictation with a configurable global shortcut.",
         subcommands: [Run.self, Setup.self, Doctor.self, Models.self, Install.self],
         defaultSubcommand: Run.self
     )
@@ -36,7 +36,7 @@ struct Run: ParsableCommand {
         let modelIsOverridden = model != nil
         if let id = model {
             guard let m = ModelRegistry.find(id) else {
-                throw ValidationError("Unknown model: \(id). Run `parrot models list` to see options.")
+                throw ValidationError("Unknown model: \(id). Run `loro models list` to see options.")
             }
             chosenModel = m
         } else if let savedModel = ModelRegistry.find(initialSettings.selectedModelID) {

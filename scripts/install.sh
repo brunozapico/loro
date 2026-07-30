@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# parrot installer.
-#   curl -fsSL https://digimata.github.io/parrot/install.sh | sh
+# Loro installer.
+#   curl -fsSL https://raw.githubusercontent.com/brunozapico/parrot/master/scripts/install.sh | sh
 #
 # Fetches the latest arm64 macOS binary from GitHub Releases, drops it
 # in /usr/local/bin, and strips the quarantine xattr so Gatekeeper doesn't
@@ -11,10 +11,11 @@
 
 set -euo pipefail
 
-REPO="digimata/parrot"
-BIN_NAME="parrot"
+REPO="brunozapico/parrot"
+BIN_NAME="loro"
+LEGACY_BIN_NAME="parrot"
 INSTALL_DIR="/usr/local/bin"
-ASSET="parrot-macos-arm64.tar.gz"
+ASSET="loro-macos-arm64.tar.gz"
 
 red()    { printf "\033[31m%s\033[0m\n" "$*" >&2; }
 green()  { printf "\033[32m%s\033[0m\n" "$*"; }
@@ -22,13 +23,13 @@ dim()    { printf "\033[2m%s\033[0m\n" "$*"; }
 
 # 1. sanity
 if [ "$(uname -s)" != "Darwin" ]; then
-    red "parrot is macOS-only (detected $(uname -s))"
+    red "Loro is macOS-only (detected $(uname -s))"
     exit 1
 fi
 
 ARCH=$(uname -m)
 if [ "$ARCH" != "arm64" ]; then
-    red "parrot requires Apple Silicon (detected $ARCH)"
+    red "Loro requires Apple Silicon (detected $ARCH)"
     red "the on-device inference engine uses the Apple Neural Engine, which Intel Macs don't have."
     exit 1
 fi
@@ -89,9 +90,15 @@ dim "→ installing to ${INSTALL_DIR}/${BIN_NAME}..."
 $SUDO mv "$TMP/${BIN_NAME}" "${INSTALL_DIR}/${BIN_NAME}"
 $SUDO chmod +x "${INSTALL_DIR}/${BIN_NAME}"
 
-green "✓ parrot ${TAG} installed at ${INSTALL_DIR}/${BIN_NAME}"
+LEGACY_BIN="${INSTALL_DIR}/${LEGACY_BIN_NAME}"
+if [ -f "$LEGACY_BIN" ]; then
+    dim "→ removing legacy binary ${LEGACY_BIN}..."
+    $SUDO rm -f "$LEGACY_BIN"
+fi
+
+green "✓ Loro ${TAG} installed at ${INSTALL_DIR}/${BIN_NAME}"
 echo
 echo "next:"
-echo "  parrot setup                       # grant mic + accessibility"
-echo "  parrot install --launch-at-login   # (optional) start at login"
-echo "  parrot                             # run the daemon"
+echo "  loro setup                       # grant mic + accessibility"
+echo "  loro install --launch-at-login   # (optional) start at login"
+echo "  loro                             # run the daemon"

@@ -44,7 +44,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         )
         let hostingController = NSHostingController(rootView: rootView)
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Parrot Settings"
+        window.title = "Loro Settings"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.setContentSize(NSSize(width: 560, height: 500))
@@ -183,7 +183,7 @@ private struct CorrectionSettingsView: View {
                     value: "\(correctionManager.contextFragmentCount) / \(6) fragments"
                 )
 
-                Text("Parrot keeps at most six recent fragments (approximately 800–1000 tokens) only in RAM. It expires after three minutes, resets when you dictate into another app, and is deleted when Parrot quits.")
+                Text("Loro keeps at most six recent fragments (approximately 800–1000 tokens) only in RAM. It expires after three minutes, resets when you dictate into another app, and is deleted when Loro quits.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -318,7 +318,7 @@ private struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if store.selectedModelID != activeModel.id {
-                    Text("Restart Parrot to load the newly selected model.")
+                    Text("Restart Loro to load the newly selected model.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else if activeModel.languageMode == .automatic {
@@ -353,7 +353,7 @@ private struct DictionarySettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Custom replacements")
                     .font(.title3.weight(.semibold))
-                Text("Replace words or phrases after transcription and before Parrot types them.")
+                Text("Replace words or phrases after transcription and before Loro types them.")
                     .foregroundStyle(.secondary)
             }
 
@@ -429,7 +429,7 @@ private struct PermissionsSettingsView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Permissions")
                     .font(.title3.weight(.semibold))
-                Text("Parrot needs both permissions for global dictation and text injection.")
+                Text("Loro needs both permissions for global dictation and text injection.")
                     .foregroundStyle(.secondary)
             }
 

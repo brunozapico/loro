@@ -88,6 +88,9 @@ struct AppSettings: Equatable {
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    private static let suiteName = "com.brunozapico.loro"
+    private static let legacySuiteName = "com.digimata.parrot"
+
     private enum Key {
         static let shortcut = "shortcut"
         static let dictationMode = "dictationMode"
@@ -149,7 +152,7 @@ final class SettingsStore: ObservableObject {
     }
 
     init(defaults: UserDefaults? = nil) {
-        let defaults = defaults ?? UserDefaults(suiteName: "com.digimata.parrot")!
+        let defaults = defaults ?? Self.makeDefaults()
         self.defaults = defaults
 
         if
@@ -241,5 +244,18 @@ final class SettingsStore: ObservableObject {
 
     private func notifyChange() {
         onChange?(current)
+    }
+
+    private static func makeDefaults() -> UserDefaults {
+        let standard = UserDefaults.standard
+        let currentDomain = standard.persistentDomain(forName: suiteName)
+        if
+            currentDomain?.isEmpty != false,
+            let legacyDomain = standard.persistentDomain(forName: legacySuiteName),
+            !legacyDomain.isEmpty
+        {
+            standard.setPersistentDomain(legacyDomain, forName: suiteName)
+        }
+        return UserDefaults(suiteName: suiteName)!
     }
 }

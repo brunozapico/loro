@@ -37,9 +37,9 @@ enum LocalCorrectionAvailability: Equatable {
         case .available:
             return "Corrections run with Apple Foundation Models entirely on this Mac."
         case .unsupportedOS:
-            return "Parrot will use the original transcription without LLM correction."
+            return "Loro will use the original transcription without LLM correction."
         case .deviceNotEligible:
-            return "Parrot will use the original transcription without LLM correction."
+            return "Loro will use the original transcription without LLM correction."
         case .appleIntelligenceNotEnabled:
             return "Enable Apple Intelligence in System Settings, then refresh this status."
         case .modelNotReady:
@@ -53,7 +53,7 @@ struct CorrectionContextSnapshot: Sendable {
 }
 
 /// Volatile conversation context. Nothing in this actor is encoded, logged, or
-/// written to disk, and the actor is discarded with the Parrot process.
+/// written to disk, and the actor is discarded with the Loro process.
 actor CorrectionContextStore {
     private struct Entry {
         let text: String

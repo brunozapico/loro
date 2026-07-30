@@ -1,4 +1,4 @@
-# Parrot — Implementation Plan
+# Loro — Implementation Plan
 
 A minimal macOS dictation daemon. CLI-launched, push-to-talk on Fn hold, on-device transcription via WhisperKit/Parakeet, text injected at cursor.
 
@@ -15,17 +15,17 @@ Phased, each milestone produces something testable end-to-end. Linear order — 
 Goal: builds, runs, exits cleanly. No behavior.
 
 - `Package.swift` — SPM exec target, `swift-argument-parser` dep
-- `Sources/parrot/main.swift` — argument parsing, `setActivationPolicy(.accessory)`, `NSApp.run()`, SIGINT handler
+- `Sources/loro/Loro.swift` — argument parsing, `setActivationPolicy(.accessory)`, `NSApp.run()`, SIGINT handler
 - Empty subfolder stubs (`Audio/`, `Input/`, `Transcription/`, `Models/`, `UI/`)
 
-**Test:** `swift run parrot` starts and stops cleanly. `parrot --help` works. No dock icon, no menubar.
+**Test:** `swift run loro` starts and stops cleanly. `loro --help` works. No dock icon, no menubar.
 
 ### M1 — Doctor + permissions surface
 
 Goal: actionable feedback on permission state before anything tries to use the perms.
 
 - `Doctor.swift` — checks: microphone (`AVCaptureDevice.authorizationStatus`), accessibility (`AXIsProcessTrusted`), Fn-key system mapping
-- `parrot doctor` subcommand prints status + remediation steps
+- `loro doctor` subcommand prints status + remediation steps
 
 **Test:** Run before granting perms — see red Xs and instructions. Grant perms, re-run — see green checks.
 
@@ -55,10 +55,10 @@ Goal: end-to-end audio → text in the terminal. Validates that ANE latency hits
 - `TranscriptionModel.swift` + `ModelRegistry.swift` + `Resources/models.json` (3 entries)
 - `ModelDownloader.swift` with stderr progress
 - `Transcriber.swift` protocol + `WhisperKitTranscriber.swift`
-- `parrot models list` and `parrot models download <id>`
+- `loro models list` and `loro models download <id>`
 - Wire end-to-end: `.released` → transcribe → pass the result directly to text injection
 
-**Test:** `parrot models download whisper-base.en`. Hold Fn, say "hello world", release — transcript is injected without being logged. Measure latency for 5s and 10s utterances. Target: <500ms post-release for <10s clips.
+**Test:** `loro models download whisper-base.en`. Hold Fn, say "hello world", release — transcript is injected without being logged. Measure latency for 5s and 10s utterances. Target: <500ms post-release for <10s clips.
 
 ### M5 — Text injection
 
@@ -85,7 +85,7 @@ Goal: second engine, persistent config.
 
 - `ParakeetTranscriber.swift` (FluidAudio)
 - Add `parakeet-tdt-0.6b-v3` to registry
-- `Config.swift` — TOML loader at `~/.config/parrot/config.toml`, CLI flags override
+- `Config.swift` — TOML loader at `~/.config/loro/config.toml`, CLI flags override
 - `--model`, `--hotkey`, `--no-overlay` flags
 
 **Test:** Switch engines via flag and config; both produce reasonable transcripts. Benchmark latency on identical 5s clip.
