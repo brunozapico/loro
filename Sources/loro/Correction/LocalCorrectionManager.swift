@@ -7,6 +7,10 @@ import LoroCore
 import FoundationModels
 #endif
 
+#if LORO_RELEASE_REQUIRES_FOUNDATION_MODELS && !canImport(FoundationModels)
+#error("Release builds require the macOS 26 SDK and FoundationModels framework")
+#endif
+
 enum LocalCorrectionAvailability: Equatable {
     case available
     case unsupportedOS

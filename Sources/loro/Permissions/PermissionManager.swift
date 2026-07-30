@@ -12,6 +12,7 @@ final class PermissionManager: ObservableObject {
     var onStatusChange: (() -> Void)?
 
     private var activeObserver: NSObjectProtocol?
+    private var refreshTimer: Timer?
 
     init() {
         microphoneStatus = AVCaptureDevice.authorizationStatus(for: .audio)
@@ -26,12 +27,25 @@ final class PermissionManager: ObservableObject {
                 self?.refresh()
             }
         }
+
+        // Accessibility changes do not reliably activate an accessory app.
+        // Polling lets Loro recover its event tap immediately after the user
+        // repairs permission in System Settings, without requiring a restart.
+        refreshTimer = Timer.scheduledTimer(
+            withTimeInterval: 2,
+            repeats: true
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+            }
+        }
     }
 
     deinit {
         if let activeObserver {
             NotificationCenter.default.removeObserver(activeObserver)
         }
+        refreshTimer?.invalidate()
     }
 
     var microphoneGranted: Bool {
@@ -75,6 +89,8 @@ final class PermissionManager: ObservableObject {
     }
 
     func openAccessibilitySettings() {
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
         openPrivacySettings(pane: "Privacy_Accessibility")
     }
 

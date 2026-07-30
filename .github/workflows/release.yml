@@ -12,7 +12,10 @@ permissions:
 jobs:
   build:
     name: build arm64 macOS binary
-    runs-on: macos-15
+    # FoundationModels is part of the macOS 26 SDK. Building on an older
+    # runner silently compiles Loro's fallback path and produces a binary that
+    # incorrectly reports macOS 26 as unsupported at runtime.
+    runs-on: macos-26
     timeout-minutes: 30
 
     steps:
@@ -31,10 +34,10 @@ jobs:
           restore-keys: spm-${{ runner.os }}-
 
       - name: test
-        run: swift test
+        run: swift test -Xswiftc -DLORO_RELEASE_REQUIRES_FOUNDATION_MODELS
 
       - name: build
-        run: swift build -c release --arch arm64
+        run: swift build -c release --arch arm64 -Xswiftc -DLORO_RELEASE_REQUIRES_FOUNDATION_MODELS
 
       - name: stage
         run: |

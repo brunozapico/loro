@@ -446,7 +446,7 @@ private struct PermissionsSettingsView: View {
                 granted: permissionManager.accessibilityGranted,
                 detail: permissionManager.accessibilityGranted
                     ? "Global shortcut and text injection are enabled."
-                    : "Required to detect the shortcut and type at the cursor.",
+                    : "Required to detect the shortcut and type at the cursor. If Loro is already enabled after an update, remove that entry and add /usr/local/bin/loro again.",
                 actionTitle: permissionManager.accessibilityGranted ? nil : "Open Settings",
                 action: permissionManager.openAccessibilitySettings
             )
@@ -460,7 +460,7 @@ private struct PermissionsSettingsView: View {
                     Label("Refresh", systemImage: "arrow.clockwise")
                 }
                 Spacer()
-                Text("After changing System Settings, return here and refresh.")
+                Text("Permission status refreshes automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
