@@ -17,15 +17,22 @@ final class MenuBarController {
     private let stateLabel: NSMenuItem
     private let modelID: String
     private let onOpenSettings: () -> Void
+    private let onClearContext: () -> Void
     private var shortcut: HotkeyShortcut
     private var dictationMode: DictationMode
     private var state: State = .idle
 
-    init(modelID: String, settings: AppSettings, onOpenSettings: @escaping () -> Void) {
+    init(
+        modelID: String,
+        settings: AppSettings,
+        onOpenSettings: @escaping () -> Void,
+        onClearContext: @escaping () -> Void
+    ) {
         self.modelID = modelID
         self.shortcut = settings.shortcut
         self.dictationMode = settings.dictationMode
         self.onOpenSettings = onOpenSettings
+        self.onClearContext = onClearContext
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
         let menu = NSMenu()
@@ -48,6 +55,16 @@ final class MenuBarController {
         )
         settingsItem.target = self
         menu.addItem(settingsItem)
+
+        let newContextItem = NSMenuItem(
+            title: "New Context",
+            action: #selector(newContextClicked),
+            keyEquivalent: ""
+        )
+        newContextItem.target = self
+        menu.addItem(newContextItem)
+
+        menu.addItem(.separator())
 
         let quit = NSMenuItem(
             title: "Quit parrot",
@@ -130,7 +147,12 @@ final class MenuBarController {
         onOpenSettings()
     }
 
+    @objc private func newContextClicked() {
+        onClearContext()
+    }
+
     @objc private func quitClicked() {
+        onClearContext()
         NSApp.terminate(nil)
     }
 }

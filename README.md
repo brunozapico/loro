@@ -34,15 +34,20 @@ Open the bird icon in the menu bar and choose **Settings…**. Preferences persi
 - **Recording overlay** — show or hide the waveform pill.
 - **Transcription model** — choose a Spanish + English multilingual model or retain an English-only model. The choice persists across launches.
 - **Custom dictionary** — replace spoken words or phrases with exact text, such as `te paso mi mail` → `name@example.com`.
+- **Local correction** — optionally improve punctuation, grammar, capitalization, proper names, and accidental repetitions with Apple Foundation Models.
 - **Permissions** — see microphone and Accessibility status and jump directly to the relevant System Settings pane.
 
 The recommended model is Whisper Large v3 626 MB, optimized for maximum multilingual accuracy. Language is detected for every dictation, so Spanish and English utterances can alternate without changing a setting; occasional English terms inside Spanish speech remain supported. Model changes take effect after restarting Parrot. `--model` remains a session-only override.
 
+Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Intelligence enabled. It is optional and always falls back to the original Whisper transcript if the model is unavailable, Low Power Mode is active, an error occurs, or the four-second timeout is reached.
+
 ## Privacy
 
 - Audio exists only in memory while recording and transcription are in progress. Parrot never writes it to disk.
-- Transcripts are injected directly at the cursor. Parrot does not log, store, or retain them.
+- Transcripts are injected directly at the cursor. Parrot does not log or persist them.
 - There is no transcript history, clipboard history, telemetry, or cloud transcription.
+- Apple Foundation Models correction runs on-device with no cloud API or network request. A fresh model session is used for each dictation.
+- Correction context exists only in RAM: at most six recent fragments (about 800–1000 tokens), expiring after three minutes and resetting when the foreground app changes. **New Context**, disabling correction, quitting, or `^C` clears it.
 - Custom replacement rules are stored locally in app preferences because they are user configuration; they are never sent anywhere.
 - When running as a LaunchAgent, stdout and stderr are discarded through `/dev/null`.
 - Installing or uninstalling the LaunchAgent removes legacy Parrot log and WAV files from `/tmp`.
@@ -67,6 +72,7 @@ parrot --no-overlay                    # override the overlay setting for this r
 
 - **Swift** — single SPM executable target
 - **WhisperKit** — Whisper inference via CoreML, ANE-accelerated
+- **Apple Foundation Models** — optional on-device transcript correction on macOS 26+
 - **AVAudioEngine** — mic capture
 - **CGEventTap** — global hotkey
 - **CGEvent** — text injection at cursor

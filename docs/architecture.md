@@ -5,7 +5,7 @@
 1. **Menu bar utility.** Single CLI-built binary with no dock icon and a small native settings window.
 2. **Configurable activation.** Use any global shortcut in Push-to-Talk or Toggle mode.
 3. **Minimal recording feedback.** A small floating pill at the bottom of the screen while recording, so the user knows the mic is hot. Click-through, borderless, hidden when idle.
-4. **On-device and ephemeral.** No network calls for transcription. Audio never leaves the machine and is never written to disk.
+4. **On-device and ephemeral.** No network calls for transcription or correction. Audio never leaves the machine and is never written to disk; correction context exists only in RAM.
 5. **Pluggable models.** Whisper out of the box; Parakeet (or future engines) via a JSON-driven registry.
 6. **Native and lean.** One Swift Package executable target. No sidecar processes. No HTTP servers.
 
@@ -14,7 +14,7 @@
 - Cross-platform (macOS only)
 - Dock icon or a traditional main application window
 - Cloud transcription providers
-- AI post-processing, summarization, agents
+- Cloud post-processing, summarization, or agentic actions
 - Speaker diarization, meeting recording, semantic search
 
 ## Why Swift
@@ -53,6 +53,18 @@ $ parrot
                                     │  └────────────┘  │
                                     └────────┬─────────┘
                                              │ String
+                                             ▼
+                                    ┌──────────────────┐
+                                    │ LocalCorrection  │
+                                    │ FoundationModels │
+                                    └────────┬─────────┘
+                                             │ corrected String
+                                             ▼
+                                    ┌──────────────────┐
+                                    │ TextReplacement  │
+                                    │ deterministic    │
+                                    └────────┬─────────┘
+                                             │ final String
                                              ▼
                                     ┌──────────────────┐
                                     │  TextInjector    │
@@ -102,6 +114,16 @@ Concrete implementations:
 - `ParakeetTranscriber` — wraps `FluidAudio` (or direct CoreML) for NVIDIA Parakeet TDT.
 
 Adding an engine = one new file conforming to `Transcriber`.
+
+### `LocalCorrectionManager`
+
+Optional conservative post-processing through Apple's on-device Foundation Models framework on macOS 26+. Every dictation creates a fresh `LanguageModelSession`, sends only the current fragment plus bounded same-app context, and discards the session after one response. The instructions permit punctuation, grammar, capitalization, proper-name, and repetition fixes while prohibiting translation, new information, answers, or continuation.
+
+The manager returns the original Whisper transcript if Apple Intelligence is unavailable, Low Power Mode is enabled, generation throws, output validation fails, or the four-second timeout wins. It never prewarms the model or performs background inference.
+
+`CorrectionContextStore` is an in-process actor with no persistence path. It retains at most six fragments and 3,600 characters (approximately 800–1000 tokens), expires after three minutes, and clears when the foreground application's bundle identifier changes. **New Context**, disabling correction, `^C`, and normal menu-bar quit also clear it; process termination destroys the RAM either way.
+
+Custom replacement trigger phrases are marked as protected in the correction prompt. `TextReplacementEngine` runs only after correction so exact configured outputs such as email addresses, names, and codes are never rewritten by the LLM.
 
 ### `TextInjector`
 
@@ -158,12 +180,13 @@ The menu bar's **Settings…** item opens a native tabbed SwiftUI interface host
 - global shortcut key code, modifier mask, and display label
 - activation mode (`pushToTalk` or `toggle`)
 - whether to show the recording overlay
+- whether to enable local Apple Foundation Models correction
 - selected default transcription model
 - custom spoken-phrase replacement rules
 
 Shortcut, activation, overlay, and replacement changes apply immediately. Model selection persists but applies on the next launch because the CoreML pipeline is loaded and warmed once at process startup. A `--model` value overrides the saved selection for that run without modifying it.
 
-Replacement rules may contain personal values such as email addresses, so the UI explicitly identifies them as local preferences; they never enter logs or network requests. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
+Replacement rules may contain personal values such as email addresses, so the UI explicitly identifies them as local preferences; they never enter logs or network requests. Correction context is deliberately excluded from `SettingsStore` and `UserDefaults`. The `--no-overlay` CLI flag remains a session-level override and disables the GUI toggle for that run.
 
 ## Permissions
 
@@ -210,12 +233,12 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 8. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
 10. `Transcriber` detects the utterance language for multilingual models, runs CoreML inference in transcription mode, and returns text in the spoken language.
-11. `TextReplacementEngine` applies the configured local phrase substitutions in memory.
-12. `TextInjector` posts the resulting string at the cursor.
-13. Overlay hides. Status: `listening`. Loop.
-14. User hits `^C`. Process exits cleanly.
-
-End-to-end latency target: <500 ms after recording stops for utterances under 10 seconds, on Apple Silicon.
+11. If enabled and available, `LocalCorrectionManager` conservatively corrects the current fragment with bounded same-app RAM context. Low Power Mode, errors, invalid output, and a four-second timeout fall back to the original text.
+12. `TextReplacementEngine` applies the configured local phrase substitutions in memory, after the LLM.
+13. `TextInjector` posts the resulting string at the cursor.
+14. The final injected fragment is retained in the volatile context actor when correction is enabled.
+15. Overlay hides. Status: `listening`. Loop.
+16. User hits `^C`. Context is cleared and the process exits cleanly.
 
 ## What we are deliberately NOT building
 
@@ -223,7 +246,7 @@ End-to-end latency target: <500 ms after recording stops for utterances under 10
 - No VAD-based hands-free mode. Push-to-talk is more reliable and uses zero idle CPU.
 - No history, transcript log, audio dump, telemetry, or clipboard manager. Output goes to the cursor and that's it.
 - LaunchAgent output is discarded through `/dev/null`; no persistent daemon log is created.
-- No model-level custom vocabulary, prompting, or AI post-processing. User-defined replacements are deterministic local string substitutions.
+- No cloud LLM, open-ended rewriting, summarization, translation, or agent behavior. AI correction is narrow, optional, local, and guarded by immediate fallback.
 - No transcript editor, history browser, or general preferences application. UI remains limited to the menu bar, focused settings window, and recording overlay.
 
 These are deliberate cuts. Each can be revisited if real usage demands it.
@@ -245,6 +268,9 @@ parrot/
     Transcription/              # the inference layer
       Transcriber.swift         # protocol
       WhisperKitTranscriber.swift
+
+    Correction/
+      LocalCorrectionManager.swift # Foundation Models + volatile context
 
     Models/
       AppSettings.swift         # persisted shortcut, mode, model, overlay, and replacements

@@ -81,6 +81,7 @@ struct AppSettings: Equatable {
     var shortcut: HotkeyShortcut
     var dictationMode: DictationMode
     var showOverlay: Bool
+    var enableLocalCorrection: Bool
     var selectedModelID: String
     var replacementRules: [ReplacementRule]
 }
@@ -91,6 +92,7 @@ final class SettingsStore: ObservableObject {
         static let shortcut = "shortcut"
         static let dictationMode = "dictationMode"
         static let showOverlay = "showOverlay"
+        static let enableLocalCorrection = "enableLocalCorrection"
         static let selectedModelID = "selectedModelID"
         static let replacementRules = "replacementRules"
     }
@@ -118,6 +120,14 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard showOverlay != oldValue else { return }
             defaults.set(showOverlay, forKey: Key.showOverlay)
+            notifyChange()
+        }
+    }
+
+    @Published var enableLocalCorrection: Bool {
+        didSet {
+            guard enableLocalCorrection != oldValue else { return }
+            defaults.set(enableLocalCorrection, forKey: Key.enableLocalCorrection)
             notifyChange()
         }
     }
@@ -166,6 +176,12 @@ final class SettingsStore: ObservableObject {
             showOverlay = defaults.bool(forKey: Key.showOverlay)
         }
 
+        if defaults.object(forKey: Key.enableLocalCorrection) == nil {
+            enableLocalCorrection = true
+        } else {
+            enableLocalCorrection = defaults.bool(forKey: Key.enableLocalCorrection)
+        }
+
         if
             let storedModelID = defaults.string(forKey: Key.selectedModelID),
             ModelRegistry.find(storedModelID) != nil
@@ -190,6 +206,7 @@ final class SettingsStore: ObservableObject {
             shortcut: shortcut,
             dictationMode: dictationMode,
             showOverlay: showOverlay,
+            enableLocalCorrection: enableLocalCorrection,
             selectedModelID: selectedModelID,
             replacementRules: replacementRules
         )

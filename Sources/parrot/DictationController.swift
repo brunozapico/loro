@@ -9,11 +9,14 @@ final class DictationController {
     private let transcriber: WhisperKitTranscriber
     private let overlay: RecordingOverlay
     private let menuBar: MenuBarController
+    private let correctionManager: LocalCorrectionManager
     private let overlayAllowed: Bool
 
     private var mode: DictationMode
     private var showOverlay: Bool
+    private var enableLocalCorrection: Bool
     private var replacementRules: [ReplacementRule]
+    private var recordingApplicationIdentifier = "unknown-application"
     private var isRecording = false
     private var isTranscribing = false
 
@@ -22,6 +25,7 @@ final class DictationController {
         transcriber: WhisperKitTranscriber,
         overlay: RecordingOverlay,
         menuBar: MenuBarController,
+        correctionManager: LocalCorrectionManager,
         settings: AppSettings,
         overlayAllowed: Bool
     ) {
@@ -29,8 +33,10 @@ final class DictationController {
         self.transcriber = transcriber
         self.overlay = overlay
         self.menuBar = menuBar
+        self.correctionManager = correctionManager
         self.mode = settings.dictationMode
         self.showOverlay = settings.showOverlay
+        self.enableLocalCorrection = settings.enableLocalCorrection
         self.replacementRules = settings.replacementRules
         self.overlayAllowed = overlayAllowed
     }
@@ -58,6 +64,7 @@ final class DictationController {
         }
         mode = settings.dictationMode
         showOverlay = settings.showOverlay
+        enableLocalCorrection = settings.enableLocalCorrection
         replacementRules = settings.replacementRules
         if isRecording, overlayIsEnabled {
             overlay.show(.recording)
@@ -83,6 +90,7 @@ final class DictationController {
     private func startRecording() {
         guard !isRecording, !isTranscribing else { return }
         do {
+            recordingApplicationIdentifier = Self.frontmostApplicationIdentifier()
             try capture.start()
             isRecording = true
             if overlayIsEnabled {
@@ -114,14 +122,31 @@ final class DictationController {
         }
         menuBar.setTranscribing()
         let replacementRules = replacementRules
+        let enableLocalCorrection = enableLocalCorrection
+        let applicationIdentifier = recordingApplicationIdentifier
+        let protectedPhrases = replacementRules.map(\.spokenPhrase)
 
-        Task { [weak self, transcriber] in
+        Task { [weak self, transcriber, correctionManager] in
             do {
                 let text = try await transcriber.transcribe(samples)
+                let correctedText = await correctionManager.correct(
+                    text,
+                    protectedPhrases: protectedPhrases,
+                    applicationIdentifier: applicationIdentifier,
+                    enabled: enableLocalCorrection
+                )
                 guard let self else { return }
                 self.isTranscribing = false
-                let processedText = TextReplacementEngine.apply(replacementRules, to: text)
+                let processedText = TextReplacementEngine.apply(
+                    replacementRules,
+                    to: correctedText
+                )
                 TextInjector.inject(processedText)
+                await correctionManager.remember(
+                    processedText,
+                    applicationIdentifier: applicationIdentifier,
+                    enabled: enableLocalCorrection
+                )
                 self.overlay.hide()
                 self.menuBar.setRecording(false)
             } catch {
@@ -131,5 +156,12 @@ final class DictationController {
                 self.menuBar.setError("transcription failed")
             }
         }
+    }
+
+    private static func frontmostApplicationIdentifier() -> String {
+        guard let application = NSWorkspace.shared.frontmostApplication else {
+            return "unknown-application"
+        }
+        return application.bundleIdentifier ?? "pid:\(application.processIdentifier)"
     }
 }

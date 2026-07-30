@@ -71,6 +71,7 @@ struct Run: ParsableCommand {
         let capture = AudioCapture()
         let overlay = MainActor.assumeIsolated { RecordingOverlay() }
         let permissionManager = MainActor.assumeIsolated { PermissionManager() }
+        let correctionManager = MainActor.assumeIsolated { LocalCorrectionManager() }
         capture.onLevel = { level in overlay.pushLevel(level) }
 
         let settingsWindow = MainActor.assumeIsolated {
@@ -79,6 +80,7 @@ struct Run: ParsableCommand {
                 activeModel: chosenModel,
                 modelIsOverridden: modelIsOverridden,
                 permissionManager: permissionManager,
+                correctionManager: correctionManager,
                 overlayAllowed: !noOverlay,
                 onShortcutRecordingChanged: { isRecording in
                     monitor.setEnabled(!isRecording)
@@ -89,7 +91,8 @@ struct Run: ParsableCommand {
             MenuBarController(
                 modelID: chosenModel.id,
                 settings: initialSettings,
-                onOpenSettings: { settingsWindow.show() }
+                onOpenSettings: { settingsWindow.show() },
+                onClearContext: { correctionManager.clearContext() }
             )
         }
         let dictation = MainActor.assumeIsolated {
@@ -98,6 +101,7 @@ struct Run: ParsableCommand {
                 transcriber: transcriber,
                 overlay: overlay,
                 menuBar: menuBar,
+                correctionManager: correctionManager,
                 settings: initialSettings,
                 overlayAllowed: !noOverlay
             )
@@ -109,6 +113,9 @@ struct Run: ParsableCommand {
                 if settings.shortcut != appliedSettings.shortcut {
                     dictation.finishActiveRecording()
                     monitor.updateShortcut(settings.shortcut)
+                }
+                if appliedSettings.enableLocalCorrection && !settings.enableLocalCorrection {
+                    correctionManager.clearContext()
                 }
                 dictation.apply(settings)
                 menuBar.apply(settings)
@@ -155,6 +162,9 @@ struct Run: ParsableCommand {
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         sigint.setEventHandler {
             monitor.stop()
+            MainActor.assumeIsolated {
+                correctionManager.clearContext()
+            }
             NSApp.terminate(nil)
         }
         sigint.resume()

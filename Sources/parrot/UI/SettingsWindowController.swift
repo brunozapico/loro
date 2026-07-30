@@ -4,6 +4,7 @@ import SwiftUI
 enum SettingsTab: Hashable {
     case general
     case dictionary
+    case correction
     case permissions
 }
 
@@ -12,12 +13,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
     private let shortcutRecorder: ShortcutRecorderModel
     private let navigation: SettingsNavigationModel
     private let permissionManager: PermissionManager
+    private let correctionManager: LocalCorrectionManager
 
     init(
         store: SettingsStore,
         activeModel: TranscriptionModel,
         modelIsOverridden: Bool,
         permissionManager: PermissionManager,
+        correctionManager: LocalCorrectionManager,
         overlayAllowed: Bool,
         onShortcutRecordingChanged: @escaping (Bool) -> Void
     ) {
@@ -26,12 +29,14 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
         self.shortcutRecorder = shortcutRecorder
         self.navigation = navigation
         self.permissionManager = permissionManager
+        self.correctionManager = correctionManager
 
         let rootView = SettingsView(
             store: store,
             activeModel: activeModel,
             modelIsOverridden: modelIsOverridden,
             permissionManager: permissionManager,
+            correctionManager: correctionManager,
             overlayAllowed: overlayAllowed,
             shortcutRecorder: shortcutRecorder,
             navigation: navigation,
@@ -60,6 +65,7 @@ final class SettingsWindowController: NSWindowController, NSWindowDelegate {
             navigation.selectedTab = tab
         }
         permissionManager.refresh()
+        correctionManager.refreshAvailability()
         NSApp.activate(ignoringOtherApps: true)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -81,6 +87,7 @@ private struct SettingsView: View {
     let activeModel: TranscriptionModel
     let modelIsOverridden: Bool
     @ObservedObject var permissionManager: PermissionManager
+    @ObservedObject var correctionManager: LocalCorrectionManager
     let overlayAllowed: Bool
     @ObservedObject var shortcutRecorder: ShortcutRecorderModel
     @ObservedObject var navigation: SettingsNavigationModel
@@ -107,6 +114,15 @@ private struct SettingsView: View {
                 }
                 .tag(SettingsTab.dictionary)
 
+            CorrectionSettingsView(
+                store: store,
+                correctionManager: correctionManager
+            )
+            .tabItem {
+                Label("Correction", systemImage: "wand.and.stars")
+            }
+            .tag(SettingsTab.correction)
+
             PermissionsSettingsView(permissionManager: permissionManager)
                 .tabItem {
                     Label("Permissions", systemImage: "lock.shield")
@@ -114,6 +130,124 @@ private struct SettingsView: View {
                 .tag(SettingsTab.permissions)
         }
         .frame(width: 560, height: 500)
+    }
+}
+
+private struct CorrectionSettingsView: View {
+    @ObservedObject var store: SettingsStore
+    @ObservedObject var correctionManager: LocalCorrectionManager
+
+    var body: some View {
+        Form {
+            Section("Apple Intelligence") {
+                Toggle(
+                    "Improve transcriptions with the on-device model",
+                    isOn: $store.enableLocalCorrection
+                )
+
+                HStack(alignment: .top, spacing: 10) {
+                    Image(systemName: statusSymbol)
+                        .foregroundStyle(statusColor)
+                        .font(.title3)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(correctionManager.availability.title)
+                            .font(.headline)
+                        Text(correctionManager.availability.detail)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Spacer()
+                }
+
+                HStack {
+                    Button {
+                        correctionManager.refreshAvailability()
+                    } label: {
+                        Label("Refresh Status", systemImage: "arrow.clockwise")
+                    }
+
+                    if shouldOfferAppleIntelligenceSettings {
+                        Button("Open System Settings") {
+                            correctionManager.openAppleIntelligenceSettings()
+                        }
+                    }
+                }
+            }
+
+            Section("Session Context") {
+                LabeledContent(
+                    "Current context",
+                    value: "\(correctionManager.contextFragmentCount) / \(6) fragments"
+                )
+
+                Text("Parrot keeps at most six recent fragments (approximately 800–1000 tokens) only in RAM. It expires after three minutes, resets when you dictate into another app, and is deleted when Parrot quits.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Button {
+                    correctionManager.clearContext()
+                } label: {
+                    Label("New Context", systemImage: "arrow.counterclockwise")
+                }
+            }
+
+            Section("Battery and Reliability") {
+                Label(
+                    "Runs only once after each dictation",
+                    systemImage: "waveform.badge.magnifyingglass"
+                )
+                Label(
+                    "Automatically skipped in Low Power Mode",
+                    systemImage: "battery.25percent"
+                )
+                Label(
+                    "Falls back to the original text after a 4-second timeout or any error",
+                    systemImage: "arrow.uturn.backward.circle"
+                )
+
+                Text("No cloud service, network request, background processing, transcript history, or persistent LLM session is used.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .onAppear {
+            correctionManager.refreshAvailability()
+        }
+    }
+
+    private var shouldOfferAppleIntelligenceSettings: Bool {
+        switch correctionManager.availability {
+        case .appleIntelligenceNotEnabled, .modelNotReady:
+            return true
+        default:
+            return false
+        }
+    }
+
+    private var statusSymbol: String {
+        switch correctionManager.availability {
+        case .available:
+            return "checkmark.circle.fill"
+        case .modelNotReady:
+            return "clock.fill"
+        default:
+            return "xmark.circle.fill"
+        }
+    }
+
+    private var statusColor: Color {
+        switch correctionManager.availability {
+        case .available:
+            return .green
+        case .modelNotReady:
+            return .orange
+        default:
+            return .red
+        }
     }
 }
 
