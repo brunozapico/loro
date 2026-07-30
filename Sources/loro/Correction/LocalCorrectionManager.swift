@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import LoroCore
 
 #if canImport(FoundationModels)
 import FoundationModels
@@ -148,7 +149,10 @@ final class LocalCorrectionManager: ObservableObject {
                 previousFragments: snapshot.fragments,
                 protectedPhrases: protectedPhrases
             )
-            return Self.validated(result, fallingBackTo: originalText)
+            return CorrectionOutputSanitizer.validated(
+                result,
+                fallingBackTo: originalText
+            )
         }
         #endif
 
@@ -302,15 +306,4 @@ final class LocalCorrectionManager: ObservableObject {
             .replacingOccurrences(of: ">", with: "&gt;")
     }
 
-    private static func validated(_ candidate: String?, fallingBackTo original: String) -> String {
-        guard let candidate else { return original }
-        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              !trimmed.hasPrefix("```"),
-              trimmed.count <= max(original.count * 2 + 64, 160)
-        else {
-            return original
-        }
-        return trimmed
-    }
 }
