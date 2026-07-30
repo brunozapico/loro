@@ -19,10 +19,8 @@ actor WhisperKitTranscriber: Transcriber {
         guard let whisperKitID = model.whisperKitID else {
             throw TranscriberError.missingEngineID
         }
-        FileHandle.standardError.write(Data("loading \(model.id)...\n".utf8))
         let config = WhisperKitConfig(model: whisperKitID, verbose: false, prewarm: true, load: true)
         pipeline = try await WhisperKit(config)
-        FileHandle.standardError.write(Data("✓ \(model.id) ready\n".utf8))
     }
 
     func transcribe(_ audio: [Float]) async throws -> String {

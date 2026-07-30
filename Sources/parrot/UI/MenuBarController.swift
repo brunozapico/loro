@@ -47,6 +47,10 @@ final class MenuBarController {
         stateLabel.title = "transcribing…"
     }
 
+    func setError(_ message: String) {
+        stateLabel.title = message
+    }
+
     private func configureButton(recording: Bool) {
         guard let button = statusItem.button else { return }
         let image = Self.birdImage()

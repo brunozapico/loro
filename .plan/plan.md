@@ -34,19 +34,18 @@ Goal: actionable feedback on permission state before anything tries to use the p
 Goal: clean `.pressed` / `.released` events for Fn.
 
 - `HotkeyMonitor.swift` — `CGEventTap` on `flagsChanged`, detect `kCGEventFlagMaskSecondaryFn` edges
-- Wire into `main.swift` — log "fn down" / "fn up" to stderr
+- Wire into `main.swift` without logging keyboard events.
 
-**Test:** Hold Fn, see "fn down". Release, see "fn up". No double-fires; no missed releases when switching apps mid-hold.
+**Test:** Hold Fn and release it without producing keyboard-event output. Confirm recording starts and stops with no double-fires or missed releases when switching apps mid-hold.
 
 ### M3 — Audio capture
 
 Goal: clean PCM buffer for the duration of the hold.
 
 - `AudioCapture.swift` — `AVAudioEngine` input tap, 16 kHz mono Float32, ring buffer
-- Start on `.pressed`, stop on `.released`, log buffer length + RMS to stderr
-- (Optional) write captured PCM to `/tmp/parrot-last.wav` for QuickTime inspection
+- Start on `.pressed`, stop on `.released`, and keep the PCM buffer in memory only.
 
-**Test:** Hold Fn, talk, release. stderr shows `captured 3.2s, RMS 0.08`. WAV plays back as clean speech.
+**Test:** Hold Fn, talk, release. Audio is transcribed without creating files on disk.
 
 ### M4 — WhisperKit transcription (de-risk milestone)
 
@@ -57,16 +56,16 @@ Goal: end-to-end audio → text in the terminal. Validates that ANE latency hits
 - `ModelDownloader.swift` with stderr progress
 - `Transcriber.swift` protocol + `WhisperKitTranscriber.swift`
 - `parrot models list` and `parrot models download <id>`
-- Wire end-to-end: `.released` → transcribe → log to stderr
+- Wire end-to-end: `.released` → transcribe → pass the result directly to text injection
 
-**Test:** `parrot models download whisper-base.en`. Hold Fn, say "hello world", release — transcript on stderr. Measure latency for 5s and 10s utterances. Target: <500ms post-release for <10s clips.
+**Test:** `parrot models download whisper-base.en`. Hold Fn, say "hello world", release — transcript is injected without being logged. Measure latency for 5s and 10s utterances. Target: <500ms post-release for <10s clips.
 
 ### M5 — Text injection
 
 Goal: the actual product loop.
 
 - `TextInjector.swift` — `CGEvent` + `CGEventKeyboardSetUnicodeString`
-- Replace stderr log with cursor injection
+- Inject the in-memory transcript at the cursor without logging it
 
 **Test:** TextEdit, Slack, Safari address bar, VS Code, fish prompt — text appears at cursor in each.
 

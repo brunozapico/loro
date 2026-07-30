@@ -35,6 +35,11 @@ struct Install: ParsableCommand {
     // MARK: -
 
     private static let label = "com.digimata.parrot"
+    private static let legacyArtifactPaths = [
+        "/tmp/parrot.out.log",
+        "/tmp/parrot.err.log",
+        "/tmp/parrot-last.wav",
+    ]
 
     private var plistURL: URL {
         let home = FileManager.default.homeDirectoryForCurrentUser
@@ -52,8 +57,8 @@ struct Install: ParsableCommand {
             "RunAtLoad": true,
             "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",
-            "StandardOutPath": "/tmp/parrot.out.log",
-            "StandardErrorPath": "/tmp/parrot.err.log",
+            "StandardOutPath": "/dev/null",
+            "StandardErrorPath": "/dev/null",
         ]
 
         let url = plistURL
@@ -70,6 +75,7 @@ struct Install: ParsableCommand {
 
         // Best-effort bootstrap; ignore failure if already loaded.
         _ = runLaunchctl(["bootout", "gui/\(uid())", url.path])
+        removeLegacyArtifacts()
         let result = runLaunchctl(["bootstrap", "gui/\(uid())", url.path])
         if result.status != 0 {
             FileHandle.standardError.write(Data(
@@ -80,7 +86,7 @@ struct Install: ParsableCommand {
         print("✓ launch-at-login installed")
         print("  plist:  \(url.path)")
         print("  binary: \(binary)")
-        print("  logs:   /tmp/parrot.out.log, /tmp/parrot.err.log")
+        print("  logs:   disabled")
     }
 
     private func removeAgent() throws {
@@ -88,9 +94,19 @@ struct Install: ParsableCommand {
         if FileManager.default.fileExists(atPath: url.path) {
             _ = runLaunchctl(["bootout", "gui/\(uid())", url.path])
             try FileManager.default.removeItem(at: url)
+            removeLegacyArtifacts()
             print("✓ launch-at-login removed")
         } else {
+            removeLegacyArtifacts()
             print("nothing to remove (no agent at \(url.path))")
+        }
+    }
+
+    /// Remove files created by versions that persisted daemon output or
+    /// explicitly dumped a recording. Current versions never create them.
+    private func removeLegacyArtifacts() {
+        for path in Self.legacyArtifactPaths where FileManager.default.fileExists(atPath: path) {
+            try? FileManager.default.removeItem(atPath: path)
         }
     }
 

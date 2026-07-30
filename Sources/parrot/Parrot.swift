@@ -22,12 +22,6 @@ struct Run: ParsableCommand {
     @Flag(name: .long, help: "Skip permission checks at startup.")
     var skipDoctor: Bool = false
 
-    @Flag(name: .long, help: "Print every keyboard event the tap sees (debug).")
-    var debugHotkey: Bool = false
-
-    @Flag(name: .long, help: "Write each capture to /tmp/parrot-last.wav for inspection.")
-    var dumpWav: Bool = false
-
     @Flag(name: .long, help: "Disable the on-screen recording overlay.")
     var noOverlay: Bool = false
 
@@ -38,25 +32,20 @@ struct Run: ParsableCommand {
         if !skipDoctor {
             let checks = DoctorReport.run()
             if !DoctorReport.allOK(checks) {
-                FileHandle.standardError.write(Data("startup checks failed:\n".utf8))
                 DoctorReport.print(checks)
-                FileHandle.standardError.write(Data("\nfix the above or pass --skip-doctor\n".utf8))
-                throw ExitCode(1)
+                throw ValidationError("Startup checks failed. Fix the issues above or pass --skip-doctor.")
             }
         }
 
         let chosenModel: TranscriptionModel
         if let id = model {
             guard let m = ModelRegistry.find(id) else {
-                FileHandle.standardError.write(Data("unknown model: \(id)\n".utf8))
-                FileHandle.standardError.write(Data("run `parrot models list` to see options.\n".utf8))
-                throw ExitCode(1)
+                throw ValidationError("Unknown model: \(id). Run `parrot models list` to see options.")
             }
             chosenModel = m
         } else {
             guard let m = ModelRegistry.recommended() else {
-                FileHandle.standardError.write(Data("no models registered\n".utf8))
-                throw ExitCode(1)
+                throw ValidationError("No models registered.")
             }
             chosenModel = m
         }
@@ -74,16 +63,14 @@ struct Run: ParsableCommand {
         }
         warmupSemaphore.wait()
         if let warmupError {
-            FileHandle.standardError.write(Data("warmup failed: \(warmupError)\n".utf8))
-            throw ExitCode(1)
+            throw ValidationError("Model warmup failed: \(warmupError)")
         }
 
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)
 
-        let monitor = HotkeyMonitor(debug: debugHotkey)
+        let monitor = HotkeyMonitor()
         let capture = AudioCapture()
-        let dumpWav = self.dumpWav
         let overlay: RecordingOverlay? = noOverlay ? nil : MainActor.assumeIsolated { RecordingOverlay() }
         if let overlay {
             capture.onLevel = { level in overlay.pushLevel(level) }
@@ -96,33 +83,21 @@ struct Run: ParsableCommand {
                 case .pressed:
                     do {
                         try capture.start()
-                        FileHandle.standardError.write(Data("● recording\n".utf8))
                         MainActor.assumeIsolated {
                             overlay?.show(.recording)
                             menuBar.setRecording(true)
                         }
                     } catch {
-                        FileHandle.standardError.write(Data("capture failed: \(error)\n".utf8))
+                        MainActor.assumeIsolated {
+                            overlay?.hide()
+                            menuBar.setError("microphone capture failed")
+                        }
                     }
                 case .released:
                     let samples = capture.stop()
                     MainActor.assumeIsolated {
                         overlay?.show(.transcribing)
                         menuBar.setTranscribing()
-                    }
-                    let seconds = Double(samples.count) / AudioCapture.targetSampleRate
-                    let rms = computeRMS(samples)
-                    FileHandle.standardError.write(Data(
-                        String(format: "○ captured %.2fs · rms %.3f\n", seconds, rms).utf8
-                    ))
-                    if dumpWav, !samples.isEmpty {
-                        let path = "/tmp/parrot-last.wav"
-                        do {
-                            try WAVWriter.write(samples: samples, sampleRate: 16_000, to: path)
-                            FileHandle.standardError.write(Data("  wrote \(path)\n".utf8))
-                        } catch {
-                            FileHandle.standardError.write(Data("  wav write failed: \(error)\n".utf8))
-                        }
                     }
                     guard !samples.isEmpty else {
                         MainActor.assumeIsolated {
@@ -132,44 +107,34 @@ struct Run: ParsableCommand {
                         return
                     }
                     Task {
-                        let started = Date()
                         do {
                             let text = try await transcriber.transcribe(samples)
-                            let elapsed = Date().timeIntervalSince(started)
-                            FileHandle.standardError.write(Data(
-                                String(format: "→ %.2fs · %@\n", elapsed, text).utf8
-                            ))
                             await MainActor.run {
                                 TextInjector.inject(text)
                                 overlay?.hide()
                                 menuBar.setRecording(false)
                             }
                         } catch {
-                            FileHandle.standardError.write(Data("transcription failed: \(error)\n".utf8))
                             await MainActor.run {
                                 overlay?.hide()
-                                menuBar.setRecording(false)
+                                menuBar.setError("transcription failed")
                             }
                         }
                     }
                 }
             }
         } catch {
-            FileHandle.standardError.write(Data("failed to register hotkey tap: \(error)\n".utf8))
-            FileHandle.standardError.write(Data("run `parrot setup` to configure permissions.\n".utf8))
-            throw ExitCode(1)
+            throw ValidationError("Failed to register the hotkey. Run `parrot setup` and try again.")
         }
 
         let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
         sigint.setEventHandler {
-            FileHandle.standardError.write(Data("\nshutting down\n".utf8))
             monitor.stop()
             NSApp.terminate(nil)
         }
         sigint.resume()
         signal(SIGINT, SIG_IGN)
 
-        FileHandle.standardError.write(Data("listening on fn hold · model: \(chosenModel.id) · ^C to quit\n".utf8))
         app.run()
     }
 }

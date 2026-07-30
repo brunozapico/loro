@@ -5,7 +5,7 @@
 1. **CLI executable.** Single binary, launched from the terminal. No menubar, no dock icon, no settings window.
 2. **Push-to-talk.** Hold Fn, speak, release — transcript appears at the cursor.
 3. **Minimal recording feedback.** A small floating pill at the bottom of the screen while recording, so the user knows the mic is hot. Click-through, borderless, hidden when idle.
-4. **On-device.** No network calls for transcription. Audio never leaves the machine.
+4. **On-device and ephemeral.** No network calls for transcription. Audio never leaves the machine and is never written to disk.
 5. **Pluggable models.** Whisper out of the box; Parakeet (or future engines) via a JSON-driven registry.
 6. **Native and lean.** One Swift Package executable target. No sidecar processes. No HTTP servers.
 
@@ -65,7 +65,7 @@ $ parrot
 
 ### `main.swift` (ParrotCLI)
 
-Argument parsing (via `swift-argument-parser`), config loading, module wiring. Calls `NSApplication.shared.setActivationPolicy(.accessory)` so the process has no dock icon and no menu bar entry, then runs `NSApp.run()` to keep the process alive and drive the AppKit run loop (needed for `NSWindow`, `CGEventTap`, and AVFoundation). Exits cleanly on SIGINT. Logs status to stderr so a user running it in a terminal can see what's happening.
+Argument parsing (via `swift-argument-parser`), config loading, module wiring. Calls `NSApplication.shared.setActivationPolicy(.accessory)` so the process has no dock icon and no menu bar entry, then runs `NSApp.run()` to keep the process alive and drive the AppKit run loop (needed for `NSWindow`, `CGEventTap`, and AVFoundation). Exits cleanly on SIGINT. The daemon does not log recordings, transcripts, keyboard events, or operational status.
 
 Subcommands:
 - `parrot` (default) — run the daemon
@@ -214,7 +214,8 @@ End-to-end latency target: <500 ms after hotkey release for utterances under 10 
 
 - No streaming partial transcripts in v1. Press, speak, release, get full text.
 - No VAD-based hands-free mode. Push-to-talk is more reliable and uses zero idle CPU.
-- No history, transcript log, or clipboard manager. Output goes to the cursor and that's it.
+- No history, transcript log, audio dump, telemetry, or clipboard manager. Output goes to the cursor and that's it.
+- LaunchAgent output is discarded through `/dev/null`; no persistent daemon log is created.
 - No custom vocabulary, prompts, or post-processing.
 - No menubar, no settings window, no preferences panel. The only UI is the recording overlay. Configuration is flags + TOML.
 

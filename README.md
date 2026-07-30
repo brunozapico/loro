@@ -25,6 +25,16 @@ That's it. There is no record button, no stop button, no "send" — `fn` is the 
 
 > **Note:** on most modern Macs the `fn` key is the bottom-left key. If yours is set to "Change input source" or "Show emoji & symbols," `parrot setup` will tell you how to flip it back to plain `fn`.
 
+## Privacy
+
+- Audio exists only in memory while recording and transcription are in progress. Parrot never writes it to disk.
+- Transcripts are injected directly at the cursor. Parrot does not log, store, or retain them.
+- There is no transcript history, clipboard history, telemetry, or cloud transcription.
+- When running as a LaunchAgent, stdout and stderr are discarded through `/dev/null`.
+- Installing or uninstalling the LaunchAgent removes legacy Parrot log and WAV files from `/tmp`.
+
+Parrot connects to Hugging Face only to download the selected WhisperKit model. Once downloaded, transcription runs locally through CoreML.
+
 ## CLI
 
 ```sh

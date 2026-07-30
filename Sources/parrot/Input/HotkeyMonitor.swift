@@ -12,15 +12,13 @@ final class HotkeyMonitor {
 
     /// Mask of the modifier we treat as the hotkey. Fn = `.maskSecondaryFn`.
     private let mask: CGEventFlags
-    private let debug: Bool
     private var onEvent: ((Event) -> Void)?
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
 
-    init(mask: CGEventFlags = .maskSecondaryFn, debug: Bool = false) {
+    init(mask: CGEventFlags = .maskSecondaryFn) {
         self.mask = mask
-        self.debug = debug
     }
 
     func start(onEvent: @escaping (Event) -> Void) throws {
@@ -29,9 +27,6 @@ final class HotkeyMonitor {
         let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
         let trusted = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
         if !trusted {
-            FileHandle.standardError.write(Data(
-                "accessibility not granted — system prompt opened. Grant access, then quit and relaunch parrot.\n".utf8
-            ))
             throw HotkeyError.tapCreateFailed
         }
 
@@ -77,15 +72,6 @@ final class HotkeyMonitor {
     }
 
     fileprivate func handle(type: CGEventType, event: CGEvent) {
-        if debug {
-            let flags = event.flags
-            let keycode = event.getIntegerValueField(.keyboardEventKeycode)
-            FileHandle.standardError.write(
-                Data(
-                    "  [debug] type=\(type.rawValue) keycode=\(keycode) flags=\(String(flags.rawValue, radix: 16))\n"
-                        .utf8
-                ))
-        }
         guard type == .flagsChanged else { return }
         let pressed = event.flags.contains(mask)
         guard pressed != isPressed else { return }
