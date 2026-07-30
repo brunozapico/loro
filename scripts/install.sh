@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Loro installer.
-#   curl -fsSL https://raw.githubusercontent.com/brunozapico/parrot/master/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/brunozapico/loro/main/scripts/install.sh | sh
 #
 # Fetches the latest arm64 macOS binary from GitHub Releases, drops it
 # in /usr/local/bin, and strips the quarantine xattr so Gatekeeper doesn't
@@ -11,7 +11,7 @@
 
 set -euo pipefail
 
-REPO="brunozapico/parrot"
+REPO="brunozapico/loro"
 BIN_NAME="loro"
 LEGACY_BIN_NAME="parrot"
 INSTALL_DIR="/usr/local/bin"

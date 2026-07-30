@@ -5,7 +5,7 @@ A Spanish-first macOS dictation app. Push-to-talk, on-device transcription, text
 ## Install
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/brunozapico/parrot/master/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/brunozapico/loro/main/scripts/install.sh | sh
 loro setup                       # grants microphone + accessibility
 loro install --launch-at-login   # optional — runs in the background on login
 ```
