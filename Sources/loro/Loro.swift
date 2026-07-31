@@ -109,6 +109,7 @@ struct Run: ParsableCommand {
             overlay.pushLevel(level)
             Task { @MainActor in
                 dictation.handleAudioLevel(level)
+                menuBar.updateAudioLevel(level)
             }
         }
 
