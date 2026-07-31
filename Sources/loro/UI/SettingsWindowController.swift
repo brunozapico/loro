@@ -294,6 +294,40 @@ private struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Toggle(
+                    "Stop automatically after silence",
+                    isOn: $store.stopOnSilence
+                )
+                .disabled(store.dictationMode != .toggle)
+
+                if store.stopOnSilence {
+                    Stepper(
+                        value: $store.silenceTimeoutSeconds,
+                        in: SettingsStore.silenceTimeoutRange
+                    ) {
+                        LabeledContent(
+                            "Silence timeout",
+                            value: "\(store.silenceTimeoutSeconds) seconds"
+                        )
+                    }
+                    .disabled(store.dictationMode != .toggle)
+                }
+
+                Text("Silence detection applies only in Toggle mode.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Section("Clipboard") {
+                Toggle(
+                    "Copy each transcription automatically",
+                    isOn: $store.copyToClipboard
+                )
+
+                Text("If text injection cannot start, Loro copies the transcript anyway so it remains available with ⌘V. Loro does not keep a separate clipboard history.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Model") {

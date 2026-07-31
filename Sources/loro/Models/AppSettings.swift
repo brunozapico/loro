@@ -81,6 +81,9 @@ struct AppSettings: Equatable {
     var shortcut: HotkeyShortcut
     var dictationMode: DictationMode
     var showOverlay: Bool
+    var copyToClipboard: Bool
+    var stopOnSilence: Bool
+    var silenceTimeoutSeconds: Int
     var enableLocalCorrection: Bool
     var selectedModelID: String
     var replacementRules: [ReplacementRule]
@@ -88,6 +91,9 @@ struct AppSettings: Equatable {
 
 @MainActor
 final class SettingsStore: ObservableObject {
+    static let defaultSilenceTimeoutSeconds = 5
+    static let silenceTimeoutRange = 2...30
+
     private static let suiteName = "com.brunozapico.loro"
     private static let legacySuiteName = "com.digimata.parrot"
 
@@ -95,6 +101,9 @@ final class SettingsStore: ObservableObject {
         static let shortcut = "shortcut"
         static let dictationMode = "dictationMode"
         static let showOverlay = "showOverlay"
+        static let copyToClipboard = "copyToClipboard"
+        static let stopOnSilence = "stopOnSilence"
+        static let silenceTimeoutSeconds = "silenceTimeoutSeconds"
         static let enableLocalCorrection = "enableLocalCorrection"
         static let selectedModelID = "selectedModelID"
         static let replacementRules = "replacementRules"
@@ -123,6 +132,35 @@ final class SettingsStore: ObservableObject {
         didSet {
             guard showOverlay != oldValue else { return }
             defaults.set(showOverlay, forKey: Key.showOverlay)
+            notifyChange()
+        }
+    }
+
+    @Published var copyToClipboard: Bool {
+        didSet {
+            guard copyToClipboard != oldValue else { return }
+            defaults.set(copyToClipboard, forKey: Key.copyToClipboard)
+            notifyChange()
+        }
+    }
+
+    @Published var stopOnSilence: Bool {
+        didSet {
+            guard stopOnSilence != oldValue else { return }
+            defaults.set(stopOnSilence, forKey: Key.stopOnSilence)
+            notifyChange()
+        }
+    }
+
+    @Published var silenceTimeoutSeconds: Int {
+        didSet {
+            let clamped = Self.silenceTimeoutRange.clamped(silenceTimeoutSeconds)
+            if clamped != silenceTimeoutSeconds {
+                silenceTimeoutSeconds = clamped
+                return
+            }
+            guard silenceTimeoutSeconds != oldValue else { return }
+            defaults.set(silenceTimeoutSeconds, forKey: Key.silenceTimeoutSeconds)
             notifyChange()
         }
     }
@@ -179,6 +217,26 @@ final class SettingsStore: ObservableObject {
             showOverlay = defaults.bool(forKey: Key.showOverlay)
         }
 
+        if defaults.object(forKey: Key.copyToClipboard) == nil {
+            copyToClipboard = true
+        } else {
+            copyToClipboard = defaults.bool(forKey: Key.copyToClipboard)
+        }
+
+        if defaults.object(forKey: Key.stopOnSilence) == nil {
+            stopOnSilence = true
+        } else {
+            stopOnSilence = defaults.bool(forKey: Key.stopOnSilence)
+        }
+
+        if defaults.object(forKey: Key.silenceTimeoutSeconds) == nil {
+            silenceTimeoutSeconds = Self.defaultSilenceTimeoutSeconds
+        } else {
+            silenceTimeoutSeconds = Self.silenceTimeoutRange.clamped(
+                defaults.integer(forKey: Key.silenceTimeoutSeconds)
+            )
+        }
+
         if defaults.object(forKey: Key.enableLocalCorrection) == nil {
             enableLocalCorrection = true
         } else {
@@ -209,6 +267,9 @@ final class SettingsStore: ObservableObject {
             shortcut: shortcut,
             dictationMode: dictationMode,
             showOverlay: showOverlay,
+            copyToClipboard: copyToClipboard,
+            stopOnSilence: stopOnSilence,
+            silenceTimeoutSeconds: silenceTimeoutSeconds,
             enableLocalCorrection: enableLocalCorrection,
             selectedModelID: selectedModelID,
             replacementRules: replacementRules
@@ -219,6 +280,9 @@ final class SettingsStore: ObservableObject {
         shortcut = .functionKey
         dictationMode = .pushToTalk
         showOverlay = true
+        copyToClipboard = true
+        stopOnSilence = true
+        silenceTimeoutSeconds = Self.defaultSilenceTimeoutSeconds
         selectedModelID = ModelRegistry.recommended()?.id ?? ""
     }
 
@@ -257,5 +321,11 @@ final class SettingsStore: ObservableObject {
             standard.setPersistentDomain(legacyDomain, forName: suiteName)
         }
         return UserDefaults(suiteName: suiteName)!
+    }
+}
+
+private extension ClosedRange where Bound == Int {
+    func clamped(_ value: Int) -> Int {
+        min(max(value, lowerBound), upperBound)
     }
 }

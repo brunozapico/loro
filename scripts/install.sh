@@ -124,9 +124,10 @@ green "✓ Loro ${TAG} installed at ${INSTALL_DIR}/${BIN_NAME}"
 echo
 if [ "$AGENT_WAS_INSTALLED" -eq 1 ]; then
     echo "Important after an unsigned Loro update:"
-    echo "  macOS may keep the old Accessibility entry while rejecting the new binary."
+    echo "  macOS may keep old Accessibility and Microphone entries while rejecting the new binary."
     echo "  If the shortcut does not respond, remove Loro from Accessibility and add:"
     echo "  ${INSTALL_DIR}/${BIN_NAME}"
+    echo "  If recording does not start, disable and re-enable Loro under Microphone."
     echo
 fi
 echo "next:"

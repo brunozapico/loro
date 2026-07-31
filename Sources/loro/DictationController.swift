@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import LoroCore
 
 /// Owns the recording lifecycle so shortcut behavior can change at runtime
 /// without duplicating audio or transcription state in the CLI entry point.
@@ -14,8 +15,13 @@ final class DictationController {
 
     private var mode: DictationMode
     private var showOverlay: Bool
+    private var copyToClipboard: Bool
+    private var stopOnSilence: Bool
+    private var silenceTimeoutSeconds: Int
     private var enableLocalCorrection: Bool
     private var replacementRules: [ReplacementRule]
+    private var silenceDetector: SilenceDetector
+    private var silenceTimer: Timer?
     private var recordingApplicationIdentifier = "unknown-application"
     private var isRecording = false
     private var isTranscribing = false
@@ -36,8 +42,14 @@ final class DictationController {
         self.correctionManager = correctionManager
         self.mode = settings.dictationMode
         self.showOverlay = settings.showOverlay
+        self.copyToClipboard = settings.copyToClipboard
+        self.stopOnSilence = settings.stopOnSilence
+        self.silenceTimeoutSeconds = settings.silenceTimeoutSeconds
         self.enableLocalCorrection = settings.enableLocalCorrection
         self.replacementRules = settings.replacementRules
+        self.silenceDetector = SilenceDetector(
+            timeout: TimeInterval(settings.silenceTimeoutSeconds)
+        )
         self.overlayAllowed = overlayAllowed
     }
 
@@ -59,13 +71,25 @@ final class DictationController {
     }
 
     func apply(_ settings: AppSettings) {
+        let silenceSettingsChanged =
+            stopOnSilence != settings.stopOnSilence
+            || silenceTimeoutSeconds != settings.silenceTimeoutSeconds
+
         if mode != settings.dictationMode, isRecording {
             stopAndTranscribe()
         }
         mode = settings.dictationMode
         showOverlay = settings.showOverlay
+        copyToClipboard = settings.copyToClipboard
+        stopOnSilence = settings.stopOnSilence
+        silenceTimeoutSeconds = settings.silenceTimeoutSeconds
         enableLocalCorrection = settings.enableLocalCorrection
         replacementRules = settings.replacementRules
+
+        if silenceSettingsChanged, isRecording {
+            startSilenceMonitoringIfNeeded()
+        }
+
         if isRecording, overlayIsEnabled {
             overlay.show(.recording)
         } else if isTranscribing, overlayIsEnabled {
@@ -83,6 +107,17 @@ final class DictationController {
         }
     }
 
+    /// AudioCapture calls this for every converted buffer. It is intentionally
+    /// lightweight: only voice activity in Toggle mode resets the silence
+    /// countdown.
+    func handleAudioLevel(_ level: Float) {
+        guard isRecording, mode == .toggle, stopOnSilence else { return }
+        silenceDetector.observe(
+            level: level,
+            at: ProcessInfo.processInfo.systemUptime
+        )
+    }
+
     private var overlayIsEnabled: Bool {
         overlayAllowed && showOverlay
     }
@@ -93,6 +128,7 @@ final class DictationController {
             recordingApplicationIdentifier = Self.frontmostApplicationIdentifier()
             try capture.start()
             isRecording = true
+            startSilenceMonitoringIfNeeded()
             if overlayIsEnabled {
                 overlay.show(.recording)
             }
@@ -106,6 +142,7 @@ final class DictationController {
     private func stopAndTranscribe() {
         guard isRecording else { return }
         isRecording = false
+        stopSilenceMonitoring()
 
         let samples = capture.stop()
         guard !samples.isEmpty else {
@@ -141,7 +178,13 @@ final class DictationController {
                     replacementRules,
                     to: correctedText
                 )
-                TextInjector.inject(processedText)
+                let injectionSucceeded = TextInjector.inject(processedText)
+                if TranscriptionDeliveryPolicy.shouldCopy(
+                    automaticCopyEnabled: self.copyToClipboard,
+                    injectionSucceeded: injectionSucceeded
+                ) {
+                    ClipboardWriter.copy(processedText)
+                }
                 await correctionManager.remember(
                     processedText,
                     applicationIdentifier: applicationIdentifier,
@@ -156,6 +199,42 @@ final class DictationController {
                 self.menuBar.setError("transcription failed")
             }
         }
+    }
+
+    private func startSilenceMonitoringIfNeeded() {
+        stopSilenceMonitoring()
+        guard isRecording, mode == .toggle, stopOnSilence else { return }
+
+        let now = ProcessInfo.processInfo.systemUptime
+        silenceDetector = SilenceDetector(
+            timeout: TimeInterval(silenceTimeoutSeconds)
+        )
+        silenceDetector.start(at: now)
+
+        let timer = Timer(timeInterval: 0.2, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.checkSilenceTimeout()
+            }
+        }
+        silenceTimer = timer
+        RunLoop.main.add(timer, forMode: .common)
+    }
+
+    private func checkSilenceTimeout() {
+        guard isRecording, mode == .toggle, stopOnSilence else {
+            stopSilenceMonitoring()
+            return
+        }
+
+        if silenceDetector.shouldStop(at: ProcessInfo.processInfo.systemUptime) {
+            stopAndTranscribe()
+        }
+    }
+
+    private func stopSilenceMonitoring() {
+        silenceTimer?.invalidate()
+        silenceTimer = nil
+        silenceDetector.reset()
     }
 
     private static func frontmostApplicationIdentifier() -> String {

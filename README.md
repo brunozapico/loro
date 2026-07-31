@@ -33,7 +33,9 @@ Open the bird icon in the menu bar and choose **Settings…**. Preferences persi
 
 - **Global shortcut** — click the shortcut field and press any key or modifier combination. `fn` remains the default.
 - **Activation** — choose **Push to Talk** (hold to record) or **Toggle** (press once to start, again to stop).
+- **Automatic silence detection** — in Toggle mode, stop and transcribe after a configurable period without speech (five seconds by default).
 - **Recording overlay** — show or hide the waveform pill.
+- **Clipboard** — optionally copy every final transcript. If cursor injection cannot start, Loro copies it anyway so it remains available with `⌘V`.
 - **Transcription model** — choose a Spanish + English multilingual model or retain an English-only model. The choice persists across launches.
 - **Custom dictionary** — replace spoken words or phrases with exact text, such as `te paso mi mail` → `name@example.com`.
 - **Local correction** — optionally improve punctuation, grammar, capitalization, proper names, and accidental repetitions with Apple Foundation Models.
@@ -47,7 +49,8 @@ Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Int
 
 - Audio exists only in memory while recording and transcription are in progress. Loro never writes it to disk.
 - Transcripts are injected directly at the cursor. Loro does not log or persist them.
-- There is no transcript history, clipboard history, telemetry, or cloud transcription.
+- Automatic clipboard copying is enabled by default and can be disabled in Settings. Loro writes only the latest result to the macOS pasteboard and keeps no separate clipboard history.
+- There is no transcript history, telemetry, or cloud transcription.
 - Apple Foundation Models correction runs on-device with no cloud API or network request. A fresh model session is used for each dictation.
 - Correction context exists only in RAM: at most six recent fragments (about 800–1000 tokens), expiring after three minutes and resetting when the foreground app changes. **New Context**, disabling correction, quitting, or `^C` clears it.
 - Custom replacement rules are stored locally in app preferences because they are user configuration; they are never sent anywhere.
@@ -78,6 +81,7 @@ loro --no-overlay                    # override the overlay setting for this run
 - **AVAudioEngine** — mic capture
 - **CGEventTap** — global hotkey
 - **CGEvent** — text injection at cursor
+- **NSPasteboard** — optional last-transcript clipboard delivery
 - **NSWindow** (borderless, click-through) — recording-indicator pill
 
 See [docs/architecture.md](docs/architecture.md) for design notes.

@@ -1,3 +1,4 @@
+import ApplicationServices
 import CoreGraphics
 import Foundation
 
@@ -9,8 +10,9 @@ enum TextInjector {
     /// Inject the given text at the current cursor location.
     /// Splits long strings into chunks because the underlying API has a
     /// per-event character limit (~20 chars).
-    static func inject(_ text: String) {
-        guard !text.isEmpty else { return }
+    @discardableResult
+    static func inject(_ text: String) -> Bool {
+        guard !text.isEmpty, AXIsProcessTrusted() else { return false }
 
         let utf16 = Array(text.utf16)
         let chunkSize = 20
@@ -19,21 +21,25 @@ enum TextInjector {
         while index < utf16.count {
             let end = min(index + chunkSize, utf16.count)
             var chunk = Array(utf16[index..<end])
-            postChunk(&chunk)
+            guard postChunk(&chunk) else { return false }
             index = end
         }
+
+        return true
     }
 
-    private static func postChunk(_ chunk: inout [UniChar]) {
+    private static func postChunk(_ chunk: inout [UniChar]) -> Bool {
         let length = chunk.count
-        guard length > 0 else { return }
+        guard length > 0 else { return false }
 
         let down = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true)
-        down?.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
-        down?.post(tap: .cgSessionEventTap)
-
         let up = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: false)
-        up?.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
-        up?.post(tap: .cgSessionEventTap)
+        guard let down, let up else { return false }
+
+        down.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
+        down.post(tap: .cgSessionEventTap)
+        up.keyboardSetUnicodeString(stringLength: length, unicodeString: &chunk)
+        up.post(tap: .cgSessionEventTap)
+        return true
     }
 }

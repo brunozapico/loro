@@ -72,7 +72,6 @@ struct Run: ParsableCommand {
         let overlay = MainActor.assumeIsolated { RecordingOverlay() }
         let permissionManager = MainActor.assumeIsolated { PermissionManager() }
         let correctionManager = MainActor.assumeIsolated { LocalCorrectionManager() }
-        capture.onLevel = { level in overlay.pushLevel(level) }
 
         let settingsWindow = MainActor.assumeIsolated {
             SettingsWindowController(
@@ -105,6 +104,12 @@ struct Run: ParsableCommand {
                 settings: initialSettings,
                 overlayAllowed: !noOverlay
             )
+        }
+        capture.onLevel = { level in
+            overlay.pushLevel(level)
+            Task { @MainActor in
+                dictation.handleAudioLevel(level)
+            }
         }
 
         MainActor.assumeIsolated {
