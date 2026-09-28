@@ -2,7 +2,7 @@
 
 ## Goals
 
-1. **Menu bar utility.** Single CLI-built binary with no dock icon and a small native settings window.
+1. **Native Mac application.** SwiftPM-built app with Dock and menu bar icons, a settings window, reopen support and Command-Q.
 2. **Configurable activation.** Use any global shortcut in Push-to-Talk or Toggle mode.
 3. **Minimal recording feedback.** A small floating pill at the bottom of the screen while recording, so the user knows the mic is hot. Click-through, borderless, hidden when idle.
 4. **On-device and ephemeral.** No network calls for transcription or correction. Audio never leaves the machine and is never written to disk; correction context exists only in RAM.
@@ -12,7 +12,6 @@
 ## Non-goals
 
 - Cross-platform (macOS only)
-- Dock icon or a traditional main application window
 - Cloud transcription providers
 - Cloud post-processing, summarization, or agentic actions
 - Speaker diarization, meeting recording, semantic search
@@ -24,12 +23,12 @@
 - **Permissions plumbing** (microphone, accessibility) is dramatically smoother in a Swift binary than via Rust crates.
 - **AppKit overlay for free.** The recording indicator (see below) is a borderless `NSWindow` — trivial in Swift, awkward in Rust.
 
-The binary is a Swift Package executable — `swift build`, `swift run`, ship a single binary. Even with the menu bar item, settings window, and overlay, there is no `.app` bundle or dock icon.
+The executable is built with SwiftPM and packaged by `scripts/build-app.sh` as `Loro.app`, including dependency resource bundles. `ApplicationDelegate` owns standard menus and the application lifecycle. See [stability.md](stability.md) for deadline, recording buffer and device-change recovery details.
 
 ## High-level shape
 
 ```
-$ loro
+Open Loro.app
                                     ┌──────────────────┐
                                     │   LoroCLI      │
                                     │  (Loro.swift)  │

@@ -36,33 +36,33 @@ jobs:
           restore-keys: spm-${{ runner.os }}-
 
       - name: test
-        run: swift test -Xswiftc -DLORO_RELEASE_REQUIRES_FOUNDATION_MODELS
+        run: scripts/test.sh
 
-      - name: build
-        run: swift build -c release --arch arm64 -Xswiftc -DLORO_RELEASE_REQUIRES_FOUNDATION_MODELS
-
-      - name: stage
+      - name: build application and installers
         run: |
-          BIN=.build/arm64-apple-macosx/release/loro
-          file "$BIN"
-          mkdir -p dist
-          cp "$BIN" dist/loro
+          VERSION="${GITHUB_REF_NAME#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VERSION=0.2.0; fi
+          scripts/build-app.sh "$VERSION"
 
-      - name: strip
-        run: strip -x dist/loro
-
-      - name: package
-        run: |
-          cd dist
-          tar -czf loro-macos-arm64.tar.gz loro
-          shasum -a 256 loro-macos-arm64.tar.gz > loro-macos-arm64.tar.gz.sha256
-          ls -lh
+      - name: upload validated installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: Loro-macos-arm64
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.tar.gz
+            dist/*.sha256
 
       - name: release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
+            dist/Loro-macos-arm64.dmg
+            dist/Loro-macos-arm64.dmg.sha256
+            dist/Loro-macos-arm64.zip
+            dist/Loro-macos-arm64.zip.sha256
             dist/loro-macos-arm64.tar.gz
             dist/loro-macos-arm64.tar.gz.sha256
           generate_release_notes: true
