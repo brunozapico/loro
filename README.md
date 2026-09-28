@@ -1,20 +1,30 @@
 # Loro
 
-A Spanish-first macOS dictation app. Push-to-talk, on-device transcription, text inserted at the cursor.
+A Spanish-first macOS dictation app. Hold a shortcut, speak, and let the transcript type itself at the cursor. Runs on your Mac, lives in the Dock and menu bar, and opens like any other app.
 
 ## Install
 
 **Requires:** macOS 14+ on Apple Silicon (M1 or newer).
 
-1. Download **Loro-macos-arm64.dmg** from [Releases](https://github.com/brunozapico/loro/releases).
-2. Open the disk image and drag **Loro** to **Applications**.
-3. Open **Loro** from Applications or Spotlight. In **Settings → Permissions**, allow Loro to use the microphone and Accessibility.
+1. **Download the installer.** Get [Loro-macos-arm64.dmg](https://github.com/brunozapico/loro/releases/latest/download/Loro-macos-arm64.dmg) from the [latest release](https://github.com/brunozapico/loro/releases/latest).
+2. **Move Loro to Applications.** Open the DMG, drag **Loro** onto **Applications**, then eject the disk image.
+3. **Open Loro.** Find it in Applications or search for it with Spotlight. No terminal command is needed.
+4. **Grant permissions.** Open **Settings → Permissions** in Loro. Allow **Microphone** to record your voice and **Accessibility** to detect the shortcut and insert text. Enable **Loro** in System Settings when prompted.
+5. **Let the model load.** The first launch downloads the selected model and prepares it for your Mac. This can take a few minutes. Settings remain available; the bird menu shows `idle` when the model is ready.
 
-Loro appears in the Dock and the menu bar. Close its settings window to keep dictating, or press **⌘Q** while Loro is active to quit completely. Open it again whenever you need it; no terminal is required.
+> **First launch:** builds are ad-hoc signed and are not yet notarized by Apple. If macOS blocks a downloaded copy, try opening it once, then go to **System Settings → Privacy & Security → Open Anyway**. Only approve a download you trust.
 
-Builds currently use ad-hoc signing, without Apple notarization. For a downloaded build, macOS may require **System Settings → Privacy & Security → Open Anyway** after the first launch attempt. Do this only for a download you trust. Grant permissions to **Loro**, not to Terminal. Existing preferences and downloaded models are reused; permissions may need to be granted again for the app.
+The recommended model is about 626 MB. An internet connection is needed for the initial download; dictation runs locally once the model is ready.
 
-An existing Loro launch-at-login agent is migrated when the installed app first opens. It opens the app through Launch Services and does not restart it after ⌘Q. To manage login manually, add Loro in **System Settings → General → Login Items**, or use the optional CLI commands below.
+### Updating from an older version
+
+Quit Loro before replacing it in Applications. If you used the old terminal version, stop that process too — `⌘Q` in the new app does not close an older copy running elsewhere.
+
+Preferences and downloaded models are reused. macOS may ask you to grant permissions again for **Loro**, even if the old executable or Terminal already had access. After an unsigned update, check **Settings → Permissions** if the shortcut or microphone stops responding.
+
+An existing Loro launch-at-login agent is migrated when the installed app first opens. The old `/usr/local/bin/loro` command is no longer needed; open the copy in Applications to use the update.
+
+### Optional terminal installer
 
 The optional terminal installer also installs the application:
 
@@ -31,7 +41,14 @@ curl -fsSL https://raw.githubusercontent.com/brunozapico/loro/main/scripts/insta
 
 That's it. There is no record button and no "send" — your global shortcut is the dictation interface.
 
-> **Note:** on most modern Macs the `fn` key is the bottom-left key. If yours is set to "Change input source" or "Show emoji & symbols," `loro doctor` will tell you how to flip it back to plain `fn`.
+> **Note:** on most modern Macs the `fn` key is the bottom-left key. If it opens the emoji picker or changes the input source, set **System Settings → Keyboard → Press 🌐 key to → Do Nothing**, or choose another shortcut in Loro Settings.
+
+## Opening and quitting
+
+- **Close Settings** to leave Loro running. The bird stays in the menu bar and the dictation shortcut keeps working.
+- **Open Settings again** by clicking Loro in the Dock, opening it from Applications, or choosing **Settings…** from the bird menu.
+- **Quit completely** with **⌘Q** while Loro is active, or choose **Quit Loro** from its menu. Open it again whenever you want to dictate.
+- **Start at login** by adding Loro in **System Settings → General → Login Items**, or use the optional CLI command below. Quitting Loro does not immediately restart it.
 
 ## Settings
 
@@ -67,9 +84,10 @@ Loro connects to Hugging Face only to download the selected WhisperKit model. On
 
 ## Optional CLI
 
-The app includes its executable at `/Applications/Loro.app/Contents/MacOS/loro`. The separate CLI archive remains available for development; extract its resource bundles alongside the executable.
+Everyday use needs no terminal. For diagnostics, model downloads, or login setup, the app includes its executable at `/Applications/Loro.app/Contents/MacOS/loro`. The separate CLI archive remains available for development; extract its resource bundles alongside the executable.
 
 ```sh
+/Applications/Loro.app/Contents/MacOS/loro doctor
 /Applications/Loro.app/Contents/MacOS/loro install --launch-at-login
 /Applications/Loro.app/Contents/MacOS/loro install --uninstall
 /Applications/Loro.app/Contents/MacOS/loro models list
