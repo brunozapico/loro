@@ -116,11 +116,11 @@ Adding an engine = one new file conforming to `Transcriber`.
 
 ### `LocalCorrectionManager`
 
-Optional conservative post-processing through Apple's on-device Foundation Models framework on macOS 26+. Every dictation creates a fresh `LanguageModelSession`, sends only the current fragment plus bounded same-app context, and discards the session after one response. The instructions permit punctuation, grammar, capitalization, proper-name, and repetition fixes while prohibiting translation, new information, answers, or continuation.
+Optional dictation editing or composition through Apple's on-device Foundation Models framework on macOS 26+. Every dictation creates a fresh `LanguageModelSession`, sends only the current fragment plus bounded same-app context, and discards the session after one response. `CorrectionRequest` supplies separate instructions: Dictate permits punctuation, grammar, capitalization, proper-name, and repetition fixes while preserving meaning; Compose follows spoken writing requests to produce an email, message, list, or rewrite without inventing facts or performing external actions. Dictate remains the default, and the selected mode is persisted in Settings.
 
-The manager returns the original Whisper transcript if Apple Intelligence is unavailable, Low Power Mode is enabled, generation throws, output validation fails, or the four-second timeout wins. It never prewarms the model or performs background inference.
+The manager returns the original Whisper transcript if Apple Intelligence is unavailable, Low Power Mode is enabled, generation throws, output validation fails, or the mode-specific timeout wins (4 seconds for Dictate, 30 seconds for Compose). It never prewarms the model or performs background inference.
 
-`CorrectionContextStore` is an in-process actor with no persistence path. It retains at most six fragments and 3,600 characters (approximately 800–1000 tokens), expires after three minutes, and clears when the foreground application's bundle identifier changes. **New Context**, disabling correction, `^C`, and normal menu-bar quit also clear it; process termination destroys the RAM either way.
+`CorrectionContextStore` is an in-process actor with no persistence path. It retains at most six fragments and 3,600 characters (approximately 800–1000 tokens), expires after three minutes, and clears when the foreground application's bundle identifier or correction mode changes. **New Context**, changing modes, disabling correction, `^C`, and normal menu-bar quit also clear it; process termination destroys the RAM either way.
 
 Custom replacement trigger phrases are marked as protected in the correction prompt. `TextReplacementEngine` runs only after correction so exact configured outputs such as email addresses, names, and codes are never rewritten by the LLM.
 
@@ -179,7 +179,7 @@ The menu bar's **Settings…** item opens a native tabbed SwiftUI interface host
 - global shortcut key code, modifier mask, and display label
 - activation mode (`pushToTalk` or `toggle`)
 - whether to show the recording overlay
-- whether to enable local Apple Foundation Models correction
+- whether to enable local Apple Foundation Models correction and use Dictate or Compose
 - selected default transcription model
 - custom spoken-phrase replacement rules
 
@@ -232,7 +232,7 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 8. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
 10. `Transcriber` detects the utterance language for multilingual models, runs CoreML inference in transcription mode, and returns text in the spoken language.
-11. If enabled and available, `LocalCorrectionManager` conservatively corrects the current fragment with bounded same-app RAM context. Low Power Mode, errors, invalid output, and a four-second timeout fall back to the original text.
+11. If enabled and available, `LocalCorrectionManager` edits or composes the current fragment using the selected mode and bounded same-app RAM context. Low Power Mode, errors, invalid output, and the mode-specific timeout fall back to the original text.
 12. `TextReplacementEngine` applies the configured local phrase substitutions in memory, after the LLM.
 13. `TextInjector` posts the resulting string at the cursor.
 14. The final injected fragment is retained in the volatile context actor when correction is enabled.
@@ -245,7 +245,7 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 - No VAD-based hands-free mode. Push-to-talk is more reliable and uses zero idle CPU.
 - No history, transcript log, audio dump, telemetry, or clipboard manager. Output goes to the cursor and that's it.
 - LaunchAgent output is discarded through `/dev/null`; no persistent daemon log is created.
-- No cloud LLM, open-ended rewriting, summarization, translation, or agent behavior. AI correction is narrow, optional, local, and guarded by immediate fallback.
+- No cloud LLM or external agent actions. Composition produces text at the cursor; it does not read the active document or send messages. Both modes remain optional, local, and protected by bounded fallback.
 - No transcript editor, history browser, or general preferences application. UI remains limited to the menu bar, focused settings window, and recording overlay.
 
 These are deliberate cuts. Each can be revisited if real usage demands it.

@@ -119,7 +119,8 @@ struct Run: ParsableCommand {
                     dictation.finishActiveRecording()
                     monitor.updateShortcut(settings.shortcut)
                 }
-                if appliedSettings.enableLocalCorrection && !settings.enableLocalCorrection {
+                if (appliedSettings.enableLocalCorrection && !settings.enableLocalCorrection)
+                    || appliedSettings.correctionMode != settings.correctionMode {
                     correctionManager.clearContext()
                 }
                 dictation.apply(settings)

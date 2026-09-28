@@ -17,14 +17,15 @@ public enum CorrectionOutputSanitizer {
 
     public static func validated(
         _ candidate: String?,
-        fallingBackTo original: String
+        fallingBackTo original: String,
+        mode: CorrectionMode = .dictate
     ) -> String {
         let fallback = sanitized(original)
             ?? original.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let candidate,
               let cleaned = sanitized(candidate),
               !cleaned.isEmpty,
-              cleaned.count <= max(original.count * 2 + 64, 160)
+              cleaned.count <= (mode == .dictate ? max(original.count * 2 + 64, 160) : 12_000)
         else {
             return fallback
         }

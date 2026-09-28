@@ -66,7 +66,24 @@ Open the bird icon in the menu bar and choose **Settings…**. Preferences persi
 
 The recommended model is Whisper Large v3 626 MB, optimized for maximum multilingual accuracy. Language is detected for every dictation, so Spanish and English utterances can alternate without changing a setting; occasional English terms inside Spanish speech remain supported. Model changes take effect after restarting Loro. `--model` remains a session-only override.
 
-Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Intelligence enabled. It is optional and always falls back to the original Whisper transcript if the model is unavailable, Low Power Mode is active, an error occurs, or the four-second timeout is reached.
+Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Intelligence enabled. It is optional and always falls back to the original Whisper transcript if the model is unavailable, Low Power Mode is active, an error occurs, or the timeout is reached (4 seconds for Dictate, 30 seconds for Compose).
+
+### Dictate or compose
+
+In **Settings → Correction → Apple Intelligence**, turn on **Improve transcriptions with the on-device model**, then choose a mode:
+
+- **Dictate** — clean up what you said, keeping the meaning and tone. This is the default.
+- **Compose** — describe what you want to write and Loro turns it into an email, message, list, or rewritten text. Your choice is saved for next time.
+
+For example, say “quiero mandar un mail a Juan preguntándole si puede entregar el presupuesto para el viernes”. Dictate keeps that sentence; Compose can produce:
+
+> Hola, Juan:
+>
+> ¿Podrías enviarme el presupuesto para el viernes?
+>
+> Gracias.
+
+Compose inserts the finished text at your cursor, just like dictation. It does not send emails or read the document you have open. Give it the details it needs: it is instructed to avoid inventing facts and to omit missing details or leave a placeholder. Check the result before sending it. If Apple Intelligence cannot complete the request, Loro inserts the original transcript instead.
 
 ## Privacy
 
@@ -75,7 +92,7 @@ Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Int
 - Automatic clipboard copying is enabled by default and can be disabled in Settings. Loro writes only the latest result to the macOS pasteboard and keeps no separate clipboard history.
 - There is no transcript history, telemetry, or cloud transcription.
 - Apple Foundation Models correction runs on-device with no cloud API or network request. A fresh model session is used for each dictation.
-- Correction context exists only in RAM: at most six recent fragments (about 800–1000 tokens), expiring after three minutes and resetting when the foreground app changes. **New Context**, disabling correction, quitting, or `^C` clears it.
+- Correction context exists only in RAM: at most six recent fragments (about 800–1000 tokens), expiring after three minutes and resetting when the foreground app changes. **New Context**, changing modes, disabling correction, quitting, or `^C` clears it.
 - Custom replacement rules are stored locally in app preferences because they are user configuration; they are never sent anywhere.
 - Diagnostic events contain only failure categories, never audio or transcript content. They are available in macOS Console under `com.brunozapico.loro`.
 - Installing or uninstalling the LaunchAgent removes log and WAV artifacts left by legacy versions.
@@ -100,7 +117,7 @@ The old `/usr/local/bin/loro` executable is no longer needed. Open the app to us
 
 - Input-device changes finish the current recording; the next recording uses a fresh audio engine.
 - A recording is capped at five minutes (16 kHz mono in memory).
-- Correction falls back to the original transcript after four seconds, even if the framework does not promptly cancel.
+- Correction falls back to the original transcript after 4 seconds in Dictate or 30 seconds in Compose, even if the framework does not promptly cancel.
 - Transcription returns an error after two minutes. A stalled inference is not duplicated; if the framework never recovers, quit and reopen Loro.
 - Startup model loading has a five-minute deadline and leaves Settings and Quit responsive. If the download needs longer, reopen to retry.
 - Two current-version instances cannot record simultaneously. Quit an old CLI version before upgrading.
@@ -126,8 +143,10 @@ Use Swift 6+ with the macOS 26 SDK (full Xcode or current Command Line Tools). D
 
 ```sh
 scripts/test.sh
-scripts/build-app.sh 0.2.0
+scripts/build-app.sh 0.3.0
 open dist/Loro-macos-arm64.dmg
 ```
+
+To also test email and list composition with the real Apple model, run `LORO_RUN_CORRECTION_TESTS=1 scripts/test.sh` on a Mac where Apple Intelligence is ready. The integration test bypasses the battery check only inside the test; it does not change your energy settings.
 
 The build creates `Loro.app`, a drag-to-Applications DMG, a ZIP and checksums in `dist/`. CI runs the tests and creates installer artifacts on every push to main; version tags publish them in Releases. Set `CODESIGN_IDENTITY` to a Developer ID identity for signing; notarization is a separate distribution step.

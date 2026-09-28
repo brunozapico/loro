@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import LoroCore
 
 enum SettingsTab: Hashable {
     case general
@@ -145,6 +146,20 @@ private struct CorrectionSettingsView: View {
                     isOn: $store.enableLocalCorrection
                 )
 
+                if store.enableLocalCorrection {
+                    Picker("Mode", selection: $store.correctionMode) {
+                        Text("Dictate").tag(CorrectionMode.dictate)
+                        Text("Compose").tag(CorrectionMode.compose)
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(store.correctionMode == .dictate
+                         ? "Correct punctuation and grammar while preserving what you said."
+                         : "Describe the email, message, or list you want. Loro writes the text for you without sending it.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 HStack(alignment: .top, spacing: 10) {
                     Image(systemName: statusSymbol)
                         .foregroundStyle(statusColor)
@@ -204,7 +219,7 @@ private struct CorrectionSettingsView: View {
                     systemImage: "battery.25percent"
                 )
                 Label(
-                    "Falls back to the original text after a 4-second timeout or any error",
+                    "Falls back to the original text after a \(store.correctionMode.timeoutSeconds)-second timeout or any error",
                     systemImage: "arrow.uturn.backward.circle"
                 )
 

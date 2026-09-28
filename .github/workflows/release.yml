@@ -41,7 +41,7 @@ jobs:
       - name: build application and installers
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VERSION=0.2.0; fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VERSION=0.3.0; fi
           scripts/build-app.sh "$VERSION"
 
       - name: upload validated installers

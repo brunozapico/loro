@@ -19,6 +19,7 @@ final class DictationController {
     private var copyToClipboard: Bool
     private var stopOnSilence: Bool
     private var silenceTimeoutSeconds: Int
+    private var correctionMode: CorrectionMode
     private var enableLocalCorrection: Bool
     private var replacementRules: [ReplacementRule]
     private var silenceDetector: SilenceDetector
@@ -52,6 +53,7 @@ final class DictationController {
         self.copyToClipboard = settings.copyToClipboard
         self.stopOnSilence = settings.stopOnSilence
         self.silenceTimeoutSeconds = settings.silenceTimeoutSeconds
+        self.correctionMode = settings.correctionMode
         self.enableLocalCorrection = settings.enableLocalCorrection
         self.replacementRules = settings.replacementRules
         self.silenceDetector = SilenceDetector(
@@ -106,6 +108,7 @@ final class DictationController {
         copyToClipboard = settings.copyToClipboard
         stopOnSilence = settings.stopOnSilence
         silenceTimeoutSeconds = settings.silenceTimeoutSeconds
+        correctionMode = settings.correctionMode
         enableLocalCorrection = settings.enableLocalCorrection
         replacementRules = settings.replacementRules
 
@@ -190,6 +193,7 @@ final class DictationController {
         }
         menuBar.setTranscribing()
         let replacementRules = replacementRules
+        let correctionMode = correctionMode
         let enableLocalCorrection = enableLocalCorrection
         let applicationIdentifier = recordingApplicationIdentifier
         let protectedPhrases = replacementRules.map(\.spokenPhrase)
@@ -204,7 +208,8 @@ final class DictationController {
                     text,
                     protectedPhrases: protectedPhrases,
                     applicationIdentifier: applicationIdentifier,
-                    enabled: enableLocalCorrection
+                    enabled: enableLocalCorrection,
+                    mode: correctionMode
                 )
                 try Task.checkCancellation()
                 guard let self, !self.shuttingDown else { return }
@@ -222,7 +227,8 @@ final class DictationController {
                 await correctionManager.remember(
                     processedText,
                     applicationIdentifier: applicationIdentifier,
-                    enabled: enableLocalCorrection
+                    enabled: enableLocalCorrection,
+                    mode: correctionMode
                 )
                 self.isTranscribing = false
                 self.overlay.hide()

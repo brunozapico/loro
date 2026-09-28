@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import CoreGraphics
 import Foundation
+import LoroCore
 
 enum DictationMode: String, Codable, CaseIterable, Identifiable {
     case pushToTalk
@@ -84,6 +85,7 @@ struct AppSettings: Equatable {
     var copyToClipboard: Bool
     var stopOnSilence: Bool
     var silenceTimeoutSeconds: Int
+    var correctionMode: CorrectionMode
     var enableLocalCorrection: Bool
     var selectedModelID: String
     var replacementRules: [ReplacementRule]
@@ -104,6 +106,7 @@ final class SettingsStore: ObservableObject {
         static let copyToClipboard = "copyToClipboard"
         static let stopOnSilence = "stopOnSilence"
         static let silenceTimeoutSeconds = "silenceTimeoutSeconds"
+        static let correctionMode = "correctionMode"
         static let enableLocalCorrection = "enableLocalCorrection"
         static let selectedModelID = "selectedModelID"
         static let replacementRules = "replacementRules"
@@ -161,6 +164,14 @@ final class SettingsStore: ObservableObject {
             }
             guard silenceTimeoutSeconds != oldValue else { return }
             defaults.set(silenceTimeoutSeconds, forKey: Key.silenceTimeoutSeconds)
+            notifyChange()
+        }
+    }
+
+    @Published var correctionMode: CorrectionMode {
+        didSet {
+            guard correctionMode != oldValue else { return }
+            defaults.set(correctionMode.rawValue, forKey: Key.correctionMode)
             notifyChange()
         }
     }
@@ -237,6 +248,8 @@ final class SettingsStore: ObservableObject {
             )
         }
 
+        correctionMode = CorrectionMode(rawValue: defaults.string(forKey: Key.correctionMode) ?? "") ?? .dictate
+
         if defaults.object(forKey: Key.enableLocalCorrection) == nil {
             enableLocalCorrection = true
         } else {
@@ -270,6 +283,7 @@ final class SettingsStore: ObservableObject {
             copyToClipboard: copyToClipboard,
             stopOnSilence: stopOnSilence,
             silenceTimeoutSeconds: silenceTimeoutSeconds,
+            correctionMode: correctionMode,
             enableLocalCorrection: enableLocalCorrection,
             selectedModelID: selectedModelID,
             replacementRules: replacementRules
