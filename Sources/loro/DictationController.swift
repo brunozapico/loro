@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import LoroCore
+import OSLog
 
 /// Owns the recording lifecycle so shortcut behavior can change at runtime
 /// without duplicating audio or transcription state in the CLI entry point.
@@ -22,7 +23,13 @@ final class DictationController {
     private var replacementRules: [ReplacementRule]
     private var silenceDetector: SilenceDetector
     private var silenceTimer: Timer?
+    private var recordingDeadlineTimer: Timer?
     private var recordingApplicationIdentifier = "unknown-application"
+    private let inference = TimedOperation<String>()
+    private var transcriptionTask: Task<Void, Never>?
+    private var modelReady = false
+    private var shuttingDown = false
+    private static let logger = Logger(subsystem: "com.brunozapico.loro", category: "dictation")
     private var isRecording = false
     private var isTranscribing = false
 
@@ -53,7 +60,23 @@ final class DictationController {
         self.overlayAllowed = overlayAllowed
     }
 
+    func setModelReady() { modelReady = true }
+
+    func shutdown() {
+        shuttingDown = true
+        transcriptionTask?.cancel()
+        transcriptionTask = nil
+        stopSilenceMonitoring()
+        recordingDeadlineTimer?.invalidate()
+        recordingDeadlineTimer = nil
+        capture.stop()
+        isRecording = false
+        overlay.hide()
+        correctionManager.clearContext()
+    }
+
     func handle(_ event: HotkeyMonitor.Event) {
+        guard modelReady, !shuttingDown else { return }
         switch mode {
         case .pushToTalk:
             switch event {
@@ -128,6 +151,11 @@ final class DictationController {
             recordingApplicationIdentifier = Self.frontmostApplicationIdentifier()
             try capture.start()
             isRecording = true
+            let deadline = Timer(timeInterval: AudioCapture.maximumDuration, repeats: false) { [weak self] _ in
+                Task { @MainActor in self?.finishActiveRecording() }
+            }
+            recordingDeadlineTimer = deadline
+            RunLoop.main.add(deadline, forMode: .common)
             startSilenceMonitoringIfNeeded()
             if overlayIsEnabled {
                 overlay.show(.recording)
@@ -135,13 +163,16 @@ final class DictationController {
             menuBar.setRecording(true)
         } catch {
             overlay.hide()
-            menuBar.setError("microphone capture failed")
+            Self.logger.error("Microphone capture failed")
+            menuBar.setError("Microphone unavailable — check Permissions and input device")
         }
     }
 
     private func stopAndTranscribe() {
         guard isRecording else { return }
         isRecording = false
+        recordingDeadlineTimer?.invalidate()
+        recordingDeadlineTimer = nil
         stopSilenceMonitoring()
 
         let samples = capture.stop()
@@ -163,17 +194,20 @@ final class DictationController {
         let applicationIdentifier = recordingApplicationIdentifier
         let protectedPhrases = replacementRules.map(\.spokenPhrase)
 
-        Task { [weak self, transcriber, correctionManager] in
+        transcriptionTask = Task { [weak self, transcriber, correctionManager, inference] in
             do {
-                let text = try await transcriber.transcribe(samples)
+                let text = try await inference.run(timeoutNanoseconds: 120_000_000_000) {
+                    try await transcriber.transcribe(samples)
+                }
+                try Task.checkCancellation()
                 let correctedText = await correctionManager.correct(
                     text,
                     protectedPhrases: protectedPhrases,
                     applicationIdentifier: applicationIdentifier,
                     enabled: enableLocalCorrection
                 )
-                guard let self else { return }
-                self.isTranscribing = false
+                try Task.checkCancellation()
+                guard let self, !self.shuttingDown else { return }
                 let processedText = TextReplacementEngine.apply(
                     replacementRules,
                     to: correctedText
@@ -190,13 +224,15 @@ final class DictationController {
                     applicationIdentifier: applicationIdentifier,
                     enabled: enableLocalCorrection
                 )
+                self.isTranscribing = false
                 self.overlay.hide()
                 self.menuBar.setRecording(false)
             } catch {
-                guard let self else { return }
+                guard let self, !self.shuttingDown else { return }
                 self.isTranscribing = false
                 self.overlay.hide()
-                self.menuBar.setError("transcription failed")
+                Self.logger.error("Transcription failed or exceeded deadline")
+                self.menuBar.setError("Transcription unavailable — retry or restart Loro")
             }
         }
     }

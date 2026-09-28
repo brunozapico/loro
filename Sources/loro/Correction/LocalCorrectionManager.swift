@@ -118,6 +118,7 @@ final class LocalCorrectionManager: ObservableObject {
     @Published private(set) var contextFragmentCount = 0
 
     private let contextStore = CorrectionContextStore()
+    private static let correctionOperation = TimedOperation<String>()
     private static let timeoutNanoseconds: UInt64 = 4_000_000_000
 
     init() {
@@ -221,25 +222,10 @@ final class LocalCorrectionManager: ObservableObject {
         )
         let timeout = timeoutNanoseconds
 
-        return await withTaskGroup(of: String?.self) { group in
-            group.addTask {
-                do {
-                    let session = LanguageModelSession(instructions: instructions)
-                    let response = try await session.respond(to: prompt)
-                    return response.content
-                } catch {
-                    return nil
-                }
-            }
-
-            group.addTask {
-                try? await Task.sleep(nanoseconds: timeout)
-                return nil
-            }
-
-            let firstResult = await group.next() ?? nil
-            group.cancelAll()
-            return firstResult
+        return try? await correctionOperation.run(timeoutNanoseconds: timeout) {
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(to: prompt)
+            return response.content
         }
     }
 

@@ -15,6 +15,7 @@ final class HotkeyMonitor {
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var isPressed = false
+    private var enabled = true
 
     var isRunning: Bool { tap != nil }
 
@@ -71,6 +72,7 @@ final class HotkeyMonitor {
     }
 
     func setEnabled(_ enabled: Bool) {
+        self.enabled = enabled
         if !enabled, isPressed {
             isPressed = false
             emit(.released)
@@ -87,6 +89,8 @@ final class HotkeyMonitor {
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
         }
+        if let tap { CFMachPortInvalidate(tap) }
+        isPressed = false
         tap = nil
         runLoopSource = nil
         onEvent = nil
@@ -95,6 +99,7 @@ final class HotkeyMonitor {
     /// Returns true when the event belongs to the configured shortcut and
     /// should be consumed instead of forwarded to the active application.
     fileprivate func handle(type: CGEventType, event: CGEvent) -> Bool {
+        guard enabled else { return false }
         if shortcut.isModifierOnly {
             guard type == .flagsChanged else { return false }
             let pressed = shortcut.containsModifiers(event.flags)
@@ -127,15 +132,18 @@ final class HotkeyMonitor {
     }
 
     fileprivate func reenableTap() {
-        if let tap {
+        if isPressed {
+            isPressed = false
+            emit(.released)
+        }
+        if enabled, let tap {
             CGEvent.tapEnable(tap: tap, enable: true)
         }
     }
 
     private func emit(_ event: Event) {
-        let handler = onEvent
-        DispatchQueue.main.async {
-            handler?(event)
+        DispatchQueue.main.async { [weak self] in
+            self?.onEvent?(event)
         }
     }
 }

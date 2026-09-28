@@ -11,10 +11,13 @@ final class RecordingOverlay {
         case transcribing
     }
 
+    private var visibilityRevision = 0
     private var window: NSPanel?
     private let model = OverlayModel()
 
     func show(_ state: State) {
+        visibilityRevision += 1
+        let revision = visibilityRevision
         ensureWindow()
         if state == .recording {
             model.resetLevels()
@@ -26,8 +29,9 @@ final class RecordingOverlay {
             window.orderFrontRegardless()
             // Defer the state change so SwiftUI lays out in the .hidden style
             // first, then animates to the visible style on the next runloop tick.
-            DispatchQueue.main.async { [model] in
-                model.state = state
+            DispatchQueue.main.async { [weak self] in
+                guard let self, self.visibilityRevision == revision else { return }
+                self.model.state = state
             }
         } else {
             model.state = state
@@ -35,11 +39,14 @@ final class RecordingOverlay {
     }
 
     func hide() {
+        visibilityRevision += 1
+        let revision = visibilityRevision
         model.state = .hidden
         // Let the SwiftUI scale+fade animation play out before yanking the
         // window — otherwise it just pops away.
         let window = self.window
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) { [weak self] in
+            guard self?.visibilityRevision == revision else { return }
             window?.orderOut(nil)
         }
     }

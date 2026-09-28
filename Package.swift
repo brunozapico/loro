@@ -1,4 +1,4 @@
-// swift-tools-version:5.9
+// swift-tools-version:6.0
 import PackageDescription
 
 let package = Package(
@@ -10,17 +10,20 @@ let package = Package(
     ],
     targets: [
         .target(name: "LoroCore"),
+        .target(name: "AudioEngineSafety"),
         .executableTarget(
             name: "loro",
             dependencies: [
                 "LoroCore",
+                "AudioEngineSafety",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 .product(name: "WhisperKit", package: "WhisperKit"),
             ]
         ),
         .testTarget(
             name: "loroTests",
-            dependencies: ["LoroCore"]
+            dependencies: ["LoroCore", "loro"]
         ),
-    ]
+    ],
+    swiftLanguageModes: [.v5]
 )

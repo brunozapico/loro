@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import ArgumentParser
 import AVFoundation
@@ -9,6 +10,11 @@ struct Setup: ParsableCommand {
     )
 
     func run() throws {
+        if Bundle.main.bundleURL.pathExtension == "app" {
+            NSWorkspace.shared.open(Bundle.main.bundleURL)
+            print("Open Loro Settings → Permissions to grant access to the application.")
+            return
+        }
         print("Loro setup")
         print("============")
         print()

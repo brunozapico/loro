@@ -1,6 +1,7 @@
 import AppKit
 import ArgumentParser
 import Foundation
+import LoroCore
 import WhisperKit
 
 @main
@@ -16,10 +17,10 @@ struct Loro: ParsableCommand {
 struct Run: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "run",
-        abstract: "Run the daemon (default)."
+        abstract: "Run the application (default)."
     )
 
-    @Flag(name: .long, help: "Skip permission checks at startup.")
+    @Flag(name: .long, help: "Start without opening Settings.")
     var skipDoctor: Bool = false
 
     @Flag(name: .long, help: "Disable the on-screen recording overlay.")
@@ -49,26 +50,22 @@ struct Run: ParsableCommand {
         }
 
         let transcriber = WhisperKitTranscriber(model: chosenModel)
-        let warmupSemaphore = DispatchSemaphore(value: 0)
-        var warmupError: Error?
-        Task.detached {
-            do {
-                try await transcriber.warmUp()
-            } catch {
-                warmupError = error
-            }
-            warmupSemaphore.signal()
-        }
-        warmupSemaphore.wait()
-        if let warmupError {
-            throw ValidationError("Model warmup failed: \(warmupError)")
-        }
-
         let app = NSApplication.shared
-        app.setActivationPolicy(.accessory)
+        if let existing = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.brunozapico.loro"
+        ).first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+            existing.activate(options: [.activateAllWindows])
+            return
+        }
+        let instance = try SingleInstanceLock()
+        guard instance.acquired else {
+            print("Loro is already running.")
+            return
+        }
+        app.setActivationPolicy(.regular)
 
         let monitor = HotkeyMonitor(shortcut: initialSettings.shortcut)
-        let capture = AudioCapture()
+        let capture = MainActor.assumeIsolated { AudioCapture() }
         let overlay = MainActor.assumeIsolated { RecordingOverlay() }
         let permissionManager = MainActor.assumeIsolated { PermissionManager() }
         let correctionManager = MainActor.assumeIsolated { LocalCorrectionManager() }
@@ -105,12 +102,14 @@ struct Run: ParsableCommand {
                 overlayAllowed: !noOverlay
             )
         }
-        capture.onLevel = { level in
-            overlay.pushLevel(level)
-            Task { @MainActor in
+        MainActor.assumeIsolated {
+            capture.onLevel = { level in
+                overlay.pushLevel(level)
                 dictation.handleAudioLevel(level)
                 menuBar.updateAudioLevel(level)
             }
+            capture.onInterruption = { dictation.finishActiveRecording() }
+            capture.onLimit = { dictation.finishActiveRecording() }
         }
 
         MainActor.assumeIsolated {
@@ -146,6 +145,7 @@ struct Run: ParsableCommand {
 
         MainActor.assumeIsolated {
             permissionManager.onStatusChange = {
+                if !permissionManager.microphoneGranted { dictation.finishActiveRecording() }
                 if permissionManager.accessibilityGranted {
                     startHotkeyMonitoring()
                 } else {
@@ -155,28 +155,57 @@ struct Run: ParsableCommand {
             }
         }
 
-        startHotkeyMonitoring()
-        let shouldShowPermissions = MainActor.assumeIsolated {
-            !skipDoctor && !permissionManager.allRequiredPermissionsGranted
+        let delegate = MainActor.assumeIsolated {
+            ApplicationDelegate(
+                onOpen: {
+                    settingsWindow.show(tab: permissionManager.allRequiredPermissionsGranted ? .general : .permissions)
+                },
+                onQuit: {
+                    monitor.stop()
+                    dictation.shutdown()
+                }
+            )
         }
-        if shouldShowPermissions {
-            DispatchQueue.main.async {
-                settingsWindow.show(tab: .permissions)
+        app.delegate = delegate
+        MainActor.assumeIsolated { delegate.installMenu() }
+        let warmupTask = Task { @MainActor in
+            Install.migrateInstalledAgent()
+            menuBar.setError("Loading transcription model…")
+            // Show the app immediately, including permissions, while loading.
+            if !skipDoctor { delegate.openSettings() }
+            do {
+                let loader = TimedOperation<Void>()
+                try await loader.run(timeoutNanoseconds: 300_000_000_000) {
+                    try await transcriber.warmUp()
+                }
+                try Task.checkCancellation()
+                dictation.setModelReady()
+                menuBar.setRecording(false)
+                startHotkeyMonitoring()
+            } catch is CancellationError {
+                return
+            } catch {
+                menuBar.setError("Model could not load — check connection and restart Loro")
+                let alert = NSAlert()
+                alert.messageText = "Loro could not load its transcription model"
+                alert.informativeText = "Check your connection and available disk space, then reopen Loro. You can also select a smaller model in Settings."
+                alert.runModal()
             }
         }
 
-        let sigint = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
-        sigint.setEventHandler {
-            monitor.stop()
-            MainActor.assumeIsolated {
-                correctionManager.clearContext()
-            }
-            NSApp.terminate(nil)
+        var signals: [DispatchSourceSignal] = []
+        for number in [SIGINT, SIGTERM] {
+            signal(number, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: number, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signals.append(source)
         }
-        sigint.resume()
-        signal(SIGINT, SIG_IGN)
 
-        app.run()
+        withExtendedLifetime((delegate, instance, signals, settingsStore, permissionManager)) {
+            app.run()
+        }
+        warmupTask.cancel()
     }
 }
 

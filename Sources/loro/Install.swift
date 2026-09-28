@@ -1,11 +1,8 @@
 import ArgumentParser
 import Foundation
 
-/// Manage Loro's LaunchAgent so the daemon starts at login.
-///
-/// We deliberately do NOT use SMAppService.mainApp here — that requires a full
-/// .app bundle. Since Loro ships as a single binary in /usr/local/bin, a
-/// plain LaunchAgent plist is the simpler, more honest mechanism.
+/// Optional launch at login. Bundled installs launch through Launch Services,
+/// so quitting the app is final until the user opens it again.
 struct Install: ParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Install or remove the launch-at-login LaunchAgent."
@@ -52,11 +49,14 @@ struct Install: ParsableCommand {
     private func writeAgent() throws {
         let binary = try resolveBinaryPath()
 
+        let isApp = Bundle.main.bundleURL.pathExtension == "app"
+        let arguments = isApp
+            ? ["/usr/bin/open", "-a", Bundle.main.bundlePath, "--args", "run", "--skip-doctor"]
+            : [binary, "run", "--skip-doctor"]
         let plist: [String: Any] = [
             "Label": Self.label,
-            "ProgramArguments": [binary, "run", "--skip-doctor"],
+            "ProgramArguments": arguments,
             "RunAtLoad": true,
-            "KeepAlive": ["SuccessfulExit": false] as [String: Any],
             "ProcessType": "Interactive",
             "StandardOutPath": "/dev/null",
             "StandardErrorPath": "/dev/null",
@@ -135,7 +135,25 @@ struct Install: ParsableCommand {
         }
     }
 
+    static func migrateInstalledAgent() {
+        guard Bundle.main.bundleURL.pathExtension == "app" else { return }
+        let appDirectory = Bundle.main.bundleURL.deletingLastPathComponent().path
+        let userApplications = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Applications").path
+        guard appDirectory == "/Applications" || appDirectory == userApplications else { return }
+        let installer = Install()
+        guard let data = try? Data(contentsOf: installer.plistURL),
+              let plist = try? PropertyListSerialization.propertyList(from: data, format: nil) as? [String: Any],
+              let arguments = plist["ProgramArguments"] as? [String],
+              arguments.first != "/usr/bin/open" || !arguments.contains(Bundle.main.bundlePath)
+        else { return }
+        try? installer.writeAgent()
+    }
+
     private func resolveBinaryPath() throws -> String {
+        if Bundle.main.bundleURL.pathExtension == "app", let executable = Bundle.main.executablePath {
+            return executable
+        }
         // /usr/local/bin/loro is the canonical install path. Honor a real
         // location if running from elsewhere (e.g. dev).
         let candidate = "/usr/local/bin/loro"

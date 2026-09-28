@@ -310,7 +310,7 @@ final class SettingsStore: ObservableObject {
         onChange?(current)
     }
 
-    private static func makeDefaults() -> UserDefaults {
+    static func makeDefaults(bundleIdentifier: String? = Bundle.main.bundleIdentifier) -> UserDefaults {
         let standard = UserDefaults.standard
         let currentDomain = standard.persistentDomain(forName: suiteName)
         if
@@ -320,12 +320,15 @@ final class SettingsStore: ObservableObject {
         {
             standard.setPersistentDomain(legacyDomain, forName: suiteName)
         }
-        return UserDefaults(suiteName: suiteName)!
+        // A native app already uses this domain. macOS rejects opening its own
+        // bundle identifier as an additional suite and can return nil.
+        if bundleIdentifier == suiteName { return standard }
+        return UserDefaults(suiteName: suiteName) ?? standard
     }
 }
 
 private extension ClosedRange where Bound == Int {
     func clamped(_ value: Int) -> Int {
-        min(max(value, lowerBound), upperBound)
+        Swift.min(Swift.max(value, lowerBound), upperBound)
     }
 }

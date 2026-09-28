@@ -2,8 +2,7 @@ import AppKit
 import LoroCore
 
 /// Status bar item in the top-right of the menu bar. Shows recording state at
-/// a glance and provides the only persistent control surface for the daemon
-/// (since we run as `.accessory` — no dock icon, no main window).
+/// a glance, alongside the regular application menu and settings window.
 @MainActor
 final class MenuBarController {
     private enum State {

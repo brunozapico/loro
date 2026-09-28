@@ -1,98 +1,105 @@
-import AVFoundation
+@preconcurrency import AVFoundation
+import AudioEngineSafety
 import Foundation
+import LoroCore
 
-/// Captures microphone audio while recording is active and returns a 16 kHz
-/// mono Float32 buffer when stopped. Format-converts on the fly so callers
-/// don't have to worry about the input device's native rate.
+/// Engine lifecycle stays on main; the real-time tap owns only its converter
+/// and a bounded, synchronized buffer for this recording.
+@MainActor
 final class AudioCapture {
     enum CaptureError: Error {
-        case engineStartFailed(Error)
+        case microphonePermissionRequired
+        case deviceUnavailable
         case converterCreationFailed
     }
 
     static let targetSampleRate: Double = 16_000
+    static let maximumDuration: TimeInterval = 5 * 60
+    private var generation = UUID()
+    private var engine: AVAudioEngine?
+    private var buffer: RecordingBuffer?
+    private var configurationObserver: NSObjectProtocol?
 
-    private let engine = AVAudioEngine()
-    private var converter: AVAudioConverter?
-    private var samples: [Float] = []
-    private var isRecording = false
-    private let lock = NSLock()
-
-    /// Called for every audio buffer with the buffer's RMS level (0…~1).
-    /// Invoked on an arbitrary thread; hop to main if you touch UI.
     var onLevel: ((Float) -> Void)?
+    var onInterruption: (() -> Void)?
+    var onLimit: (() -> Void)?
 
-    /// Begin recording. Idempotent — calling while already recording is a no-op.
     func start() throws {
-        guard !isRecording else { return }
-
-        let input = engine.inputNode
-        let inputFormat = input.outputFormat(forBus: 0)
-
-        let targetFormat = AVAudioFormat(
-            commonFormat: .pcmFormatFloat32,
-            sampleRate: AudioCapture.targetSampleRate,
-            channels: 1,
-            interleaved: false
-        )!
-
-        guard let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
+        guard engine == nil else { return }
+        guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
+            throw CaptureError.microphonePermissionRequired
+        }
+        let engine = AVAudioEngine()
+        guard let inputFormat = LoroAudioInputFormat(engine),
+              inputFormat.sampleRate.isFinite, inputFormat.sampleRate > 0,
+              inputFormat.channelCount > 0 else { throw CaptureError.deviceUnavailable }
+        guard let targetFormat = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32, sampleRate: Self.targetSampleRate,
+            channels: 1, interleaved: false
+        ), let converter = AVAudioConverter(from: inputFormat, to: targetFormat) else {
             throw CaptureError.converterCreationFailed
         }
-        self.converter = converter
-
-        lock.lock()
-        samples.removeAll(keepingCapacity: true)
-        lock.unlock()
-
-        // Tap with input format; convert inside the callback.
-        input.installTap(onBus: 0, bufferSize: 4096, format: inputFormat) { [weak self] buffer, _ in
-            self?.process(buffer: buffer, converter: converter, targetFormat: targetFormat)
+        let buffer = RecordingBuffer(limit: Int(Self.maximumDuration * Self.targetSampleRate))
+        let generation = UUID()
+        self.generation = generation
+        self.engine = engine
+        self.buffer = buffer
+        configurationObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange, object: engine, queue: nil
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.engine != nil, self.generation == generation else { return }
+                self.onInterruption?()
+            }
         }
-
-        engine.prepare()
-        do {
-            try engine.start()
-        } catch {
-            input.removeTap(onBus: 0)
-            throw CaptureError.engineStartFailed(error)
+        var startError: NSError?
+        let started = LoroStartAudioEngine(engine, { @Sendable [weak self] input, _ in
+            guard input.format.sampleRate == inputFormat.sampleRate,
+                  input.format.channelCount == inputFormat.channelCount else {
+                Task { @MainActor in
+                    guard let self, self.engine != nil, self.generation == generation else { return }
+                    self.onInterruption?()
+                }
+                return
+            }
+            let chunk = Self.convert(input, with: converter, to: targetFormat)
+            let reachedLimit = buffer.append(chunk)
+            let level = computeRMS(chunk)
+            Task { @MainActor in
+                guard let self, self.engine != nil, self.generation == generation else { return }
+                self.onLevel?(level)
+                if reachedLimit { self.onLimit?() }
+            }
+        }, &startError)
+        if !started {
+            stop()
+            throw startError ?? NSError(domain: "com.brunozapico.loro.audio", code: 1)
         }
-
-        isRecording = true
     }
 
-    /// Stop recording and return all captured samples (16 kHz mono Float32).
     @discardableResult
     func stop() -> [Float] {
-        guard isRecording else { return [] }
-        engine.stop()
-        engine.inputNode.removeTap(onBus: 0)
-        isRecording = false
-
-        lock.lock()
-        let captured = samples
-        samples.removeAll(keepingCapacity: true)
-        lock.unlock()
+        if let observer = configurationObserver {
+            NotificationCenter.default.removeObserver(observer)
+            configurationObserver = nil
+        }
+        let captured = buffer?.finish() ?? []
+        buffer = nil
+        if let engine { LoroStopAudioEngine(engine) }
+        engine = nil
         return captured
     }
 
-    private func process(
-        buffer: AVAudioPCMBuffer,
-        converter: AVAudioConverter,
-        targetFormat: AVAudioFormat
-    ) {
-        // Output buffer capacity scales with sample-rate ratio.
-        let ratio = targetFormat.sampleRate / buffer.format.sampleRate
-        let outCapacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
-
-        guard let outBuffer = AVAudioPCMBuffer(
-            pcmFormat: targetFormat,
-            frameCapacity: outCapacity
-        ) else { return }
-
+    nonisolated private static func convert(
+        _ buffer: AVAudioPCMBuffer, with converter: AVAudioConverter, to format: AVAudioFormat
+    ) -> [Float] {
+        let ratio = format.sampleRate / buffer.format.sampleRate
+        let capacity = AVAudioFrameCount(Double(buffer.frameLength) * ratio) + 64
+        guard let output = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: capacity) else { return [] }
         var consumed = false
-        let inputBlock: AVAudioConverterInputBlock = { _, status in
-            if consumed {
+        var error: NSError?
+        let status = converter.convert(to: output, error: &error) { _, status in
+            guard !consumed else {
                 status.pointee = .noDataNow
                 return nil
             }
@@ -100,28 +107,13 @@ final class AudioCapture {
             status.pointee = .haveData
             return buffer
         }
-
-        var error: NSError?
-        let status = converter.convert(to: outBuffer, error: &error, withInputFrom: inputBlock)
-        guard status != .error, let channelData = outBuffer.floatChannelData else { return }
-
-        let count = Int(outBuffer.frameLength)
-        let ptr = channelData[0]
-        let chunk = Array(UnsafeBufferPointer(start: ptr, count: count))
-
-        lock.lock()
-        samples.append(contentsOf: chunk)
-        lock.unlock()
-
-        if let onLevel {
-            onLevel(computeRMS(chunk))
-        }
+        guard status != .error, let data = output.floatChannelData else { return [] }
+        return Array(UnsafeBufferPointer(start: data[0], count: Int(output.frameLength)))
     }
 }
 
 func computeRMS(_ samples: [Float]) -> Float {
     guard !samples.isEmpty else { return 0 }
-    var sum: Double = 0
-    for s in samples { sum += Double(s * s) }
+    let sum = samples.reduce(0.0) { $0 + Double($1) * Double($1) }
     return Float((sum / Double(samples.count)).squareRoot())
 }

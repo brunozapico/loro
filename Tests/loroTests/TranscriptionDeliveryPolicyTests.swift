@@ -1,9 +1,9 @@
-import XCTest
+import Testing
 @testable import LoroCore
 
-final class TranscriptionDeliveryPolicyTests: XCTestCase {
-    func testAutomaticCopyCopiesAfterSuccessfulInjection() {
-        XCTAssertTrue(
+final class TranscriptionDeliveryPolicyTests {
+    @Test func testAutomaticCopyCopiesAfterSuccessfulInjection() {
+        #expect(
             TranscriptionDeliveryPolicy.shouldCopy(
                 automaticCopyEnabled: true,
                 injectionSucceeded: true
@@ -11,8 +11,8 @@ final class TranscriptionDeliveryPolicyTests: XCTestCase {
         )
     }
 
-    func testAutomaticCopyCopiesAfterFailedInjection() {
-        XCTAssertTrue(
+    @Test func testAutomaticCopyCopiesAfterFailedInjection() {
+        #expect(
             TranscriptionDeliveryPolicy.shouldCopy(
                 automaticCopyEnabled: true,
                 injectionSucceeded: false
@@ -20,8 +20,8 @@ final class TranscriptionDeliveryPolicyTests: XCTestCase {
         )
     }
 
-    func testDisabledAutomaticCopyPreservesClipboardAfterFailure() {
-        XCTAssertTrue(
+    @Test func testDisabledAutomaticCopyPreservesClipboardAfterFailure() {
+        #expect(
             TranscriptionDeliveryPolicy.shouldCopy(
                 automaticCopyEnabled: false,
                 injectionSucceeded: false
@@ -29,12 +29,10 @@ final class TranscriptionDeliveryPolicyTests: XCTestCase {
         )
     }
 
-    func testDisabledAutomaticCopyLeavesClipboardAloneAfterSuccess() {
-        XCTAssertFalse(
-            TranscriptionDeliveryPolicy.shouldCopy(
+    @Test func testDisabledAutomaticCopyLeavesClipboardAloneAfterSuccess() {
+        #expect(!TranscriptionDeliveryPolicy.shouldCopy(
                 automaticCopyEnabled: false,
                 injectionSucceeded: true
-            )
-        )
+            ))
     }
 }
