@@ -85,7 +85,7 @@ Subcommands:
 
 ### `HotkeyMonitor`
 
-Global shortcut via `CGEventTap` (requires Accessibility permission). Default: **Fn**, with support for arbitrary key and modifier combinations. Modifier-only shortcuts use `flagsChanged`; key-based shortcuts use `keyDown` / `keyUp`. Matching events are consumed so the shortcut does not also trigger the foreground application. Changes from the settings window apply without restarting the event tap.
+Global shortcut via `CGEventTap` (requires Accessibility permission). Default: **Fn**, with support for arbitrary key and modifier combinations. Modifier-only shortcuts use `flagsChanged`; key-based shortcuts use `keyDown` / `keyUp`. Matching events are consumed so the shortcut does not also trigger the foreground application. Changes from the settings window apply without restarting the event tap. A dedicated run loop keeps the event tap independent of audio startup on the main thread. Timeout recovery checks physical key/modifier state and releases only a shortcut that is no longer held.
 
 `DictationController` interprets the emitted `.pressed` / `.released` edges:
 
@@ -192,7 +192,7 @@ Replacement rules may contain personal values such as email addresses, so the UI
 Two permissions are required and surfaced both through `loro doctor` and the GUI's **Permissions** tab:
 
 1. **Microphone** — standard `AVCaptureDevice` request, fires on first audio engine start.
-2. **Accessibility** — required for `CGEventTap` (hotkey) and `CGEvent` posting (text injection). User toggles in System Settings → Privacy & Security → Accessibility, granting the *terminal* (or whatever launched Loro) permission, since the binary inherits its parent's TCC identity.
+2. **Accessibility** — required for `CGEventTap` (hotkey) and `CGEvent` posting (text injection). For the native app, grant Loro.app in System Settings → Privacy & Security → Accessibility. CLI launches can be attributed to their terminal instead.
 
 `PermissionManager` refreshes both states whenever the app becomes active. Missing permissions no longer prevent the menu bar and settings window from starting: Loro opens the Permissions tab, shows a clear granted/missing state, and links directly to the matching System Settings pane. When Accessibility becomes available, the global shortcut monitor starts without requiring a process restart.
 
@@ -204,7 +204,7 @@ When you launch `loro` from `Terminal.app`, accessibility permission is granted 
 - Switching terminals (Terminal → iTerm → Ghostty) requires re-granting permission.
 - Running under `launchd` requires granting permission to whatever spawns it.
 
-This is a macOS platform behavior, not a Loro bug. `loro doctor` will identify the parent process and tell the user which app needs the permission.
+`loro doctor` identifies the native app when running from its bundle, and the parent terminal for CLI use. Native updates must reuse a certificate-based signing identity: an ad-hoc signature is bound to the binary hash and invalidates existing grants on rebuild. The build script now requires a persistent identity unless explicitly creating ad-hoc test artifacts.
 
 ## Models — what ships
 
@@ -224,7 +224,7 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 
 1. User runs `loro` in a terminal.
 2. `LoroCLI` loads persisted settings and instantiates modules.
-3. Sets `.accessory` activation policy and enters `NSApp.run()`. Missing permissions are presented in the settings window instead of terminating the process.
+3. Sets `.regular` activation policy and enters `NSApp.run()`. Missing permissions are presented in the settings window instead of terminating the process.
 4. User activates the configured shortcut.
 5. `HotkeyMonitor` fires `.pressed`. According to the selected mode, `DictationController` starts recording immediately or toggles the current recording state.
 6. `AudioCapture` starts the AVAudioEngine tap. Buffers fill. Overlay animates mic level.
@@ -308,4 +308,4 @@ Swift's module unit is the **SPM target** (one target = one module = one `import
 - **Parakeet via FluidAudio vs. direct CoreML?** FluidAudio is faster to integrate but adds a dependency. Decide once we benchmark both.
 - **Hotkey conflicts.** Right-Option is unused on most keyboards but some users remap it. Print a clear error if `CGEventTap` registration fails.
 - **First-run model download.** Add richer progress feedback for the recommended 626 MB model without persisting operational logs.
-- **Code signing.** A self-built unsigned binary works fine locally but accessibility permission persistence is more reliable for signed binaries. Decide if we sign for personal distribution.
+- **Code signing.** Local builds reuse a certificate in the signing Mac’s login keychain. Release automation must never replace these with ad-hoc binaries. Developer ID signing and notarization remain necessary for normal trusted public distribution.

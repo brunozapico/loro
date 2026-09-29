@@ -495,7 +495,7 @@ private struct PermissionsSettingsView: View {
                 granted: permissionManager.accessibilityGranted,
                 detail: permissionManager.accessibilityGranted
                     ? "Global shortcut and text injection are enabled."
-                    : "Required to detect the shortcut and type at the cursor. If Loro is already enabled after an update, remove that entry and add /usr/local/bin/loro again.",
+                    : "Required to detect the shortcut and type at the cursor. If Loro is already enabled after an update, remove that entry and add the current Loro.app from Applications again.",
                 actionTitle: permissionManager.accessibilityGranted ? nil : "Open Settings",
                 action: permissionManager.openAccessibilitySettings
             )

@@ -108,8 +108,8 @@ struct Run: ParsableCommand {
                 dictation.handleAudioLevel(level)
                 menuBar.updateAudioLevel(level)
             }
-            capture.onInterruption = { dictation.finishActiveRecording() }
-            capture.onLimit = { dictation.finishActiveRecording() }
+            capture.onInterruption = { dictation.finishActiveRecording(reason: "audio device interrupted") }
+            capture.onLimit = { dictation.finishActiveRecording(reason: "audio buffer limit") }
         }
 
         MainActor.assumeIsolated {

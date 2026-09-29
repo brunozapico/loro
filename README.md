@@ -12,7 +12,7 @@ A Spanish-first macOS dictation app. Hold a shortcut, speak, and let the transcr
 4. **Grant permissions.** Open **Settings → Permissions** in Loro. Allow **Microphone** to record your voice and **Accessibility** to detect the shortcut and insert text. Enable **Loro** in System Settings when prompted.
 5. **Let the model load.** The first launch downloads the selected model and prepares it for your Mac. This can take a few minutes. Settings remain available; the bird menu shows `idle` when the model is ready.
 
-> **First launch:** builds are ad-hoc signed and are not yet notarized by Apple. If macOS blocks a downloaded copy, try opening it once, then go to **System Settings → Privacy & Security → Open Anyway**. Only approve a download you trust.
+> **First launch:** local release builds use a persistent signing certificate and are not yet notarized by Apple. If macOS blocks a downloaded copy, try opening it once, then go to **System Settings → Privacy & Security → Open Anyway**. Only approve a download you trust.
 
 The recommended model is about 626 MB. An internet connection is needed for the initial download; dictation runs locally once the model is ready.
 
@@ -20,7 +20,7 @@ The recommended model is about 626 MB. An internet connection is needed for the 
 
 Quit Loro before replacing it in Applications. If you used the old terminal version, stop that process too — `⌘Q` in the new app does not close an older copy running elsewhere.
 
-Preferences and downloaded models are reused. macOS may ask you to grant permissions again for **Loro**, even if the old executable or Terminal already had access. After an unsigned update, check **Settings → Permissions** if the shortcut or microphone stops responding.
+Preferences and downloaded models are reused. macOS may ask you to grant permissions again for **Loro**, even if the old executable or Terminal already had access. When migrating from an older ad-hoc build, check **Settings → Permissions** if the shortcut or microphone stops responding.
 
 An existing Loro launch-at-login agent is migrated when the installed app first opens. The old `/usr/local/bin/loro` command is no longer needed; open the copy in Applications to use the update.
 
@@ -143,10 +143,20 @@ Use Swift 6+ with the macOS 26 SDK (full Xcode or current Command Line Tools). D
 
 ```sh
 scripts/test.sh
-scripts/build-app.sh 0.3.0
+scripts/setup-local-signing.sh # once per signing Mac
+scripts/test-signing.sh
+scripts/build-app.sh 0.3.1
 open dist/Loro-macos-arm64.dmg
 ```
 
 To also test email and list composition with the real Apple model, run `LORO_RUN_CORRECTION_TESTS=1 scripts/test.sh` on a Mac where Apple Intelligence is ready. The integration test bypasses the battery check only inside the test; it does not change your energy settings.
 
-The build creates `Loro.app`, a drag-to-Applications DMG, a ZIP and checksums in `dist/`. CI runs the tests and creates installer artifacts on every push to main; version tags publish them in Releases. Set `CODESIGN_IDENTITY` to a Developer ID identity for signing; notarization is a separate distribution step.
+The build creates `Loro.app`, a drag-to-Applications DMG, a ZIP and checksums in `dist/`. CI runs tests and creates test artifacts on every push to main. Publish installer assets from the signing Mac; tagged CI builds cannot replace them with ad-hoc binaries. Set `CODESIGN_IDENTITY` to a Developer ID identity for signing; notarization is a separate distribution step.
+
+### Stable permissions across updates
+
+Keep the same signing certificate when building updates. Ad-hoc signatures identify each binary by its hash, so rebuilding used to invalidate Accessibility even when System Settings still showed Loro as enabled. Local builds now reuse a certificate kept in your login keychain and refuse to silently fall back to ad-hoc signing. Keep that keychain; creating a new certificate changes the identity again. For public distribution, use the same Developer ID identity across releases. CI creates explicitly ad-hoc test artifacts and cannot overwrite signed releases.
+
+When migrating from an old ad-hoc version, remove the old Loro entry in **System Settings → Privacy & Security → Accessibility**, add **/Applications/Loro.app**, and enable it once. Reopen Loro afterward. Do not add the old `/usr/local/bin/loro` for the native app. Loro cannot grant itself this permission.
+
+The shortcut now runs on its own thread, so starting the microphone cannot stall its event tap. If macOS suspends the tap, Loro checks whether the shortcut is still physically held instead of ending the recording immediately. Diagnostic logs include the reason recording stopped, but never the audio or transcript.

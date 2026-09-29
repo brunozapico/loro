@@ -49,6 +49,12 @@ final class AudioCapture {
         ) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.engine != nil, self.generation == generation else { return }
+                // Starting the engine can itself produce a configuration
+                // notification. Only interrupt when capture actually changed.
+                if engine.isRunning,
+                   let current = LoroAudioInputFormat(engine),
+                   current.sampleRate == inputFormat.sampleRate,
+                   current.channelCount == inputFormat.channelCount { return }
                 self.onInterruption?()
             }
         }

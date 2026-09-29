@@ -53,7 +53,8 @@ enum DoctorReport {
         if AXIsProcessTrusted() {
             return Check(name: "accessibility", status: .ok, remediation: nil)
         }
-        let parent = parentProcessName() ?? "your terminal"
+        let parent = Bundle.main.bundleURL.pathExtension == "app"
+            ? Bundle.main.bundleURL.path : (parentProcessName() ?? "your terminal")
         return Check(
             name: "accessibility",
             status: .fail("not granted"),

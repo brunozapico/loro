@@ -38,13 +38,19 @@ jobs:
       - name: test
         run: scripts/test.sh
 
+      # Never publish a new ad-hoc identity as an update. Release certificates
+      # must be provisioned persistently; local releases use the maintainer's key.
       - name: build application and installers
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        env:
+          LORO_ALLOW_ADHOC: "1"
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VERSION=0.3.0; fi
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then VERSION=0.3.1; fi
           scripts/build-app.sh "$VERSION"
 
-      - name: upload validated installers
+      - name: upload test installers
+        if: "!startsWith(github.ref, 'refs/tags/')"
         uses: actions/upload-artifact@v4
         with:
           name: Loro-macos-arm64
@@ -53,17 +59,3 @@ jobs:
             dist/*.zip
             dist/*.tar.gz
             dist/*.sha256
-
-      - name: release
-        uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
-        with:
-          files: |
-            dist/Loro-macos-arm64.dmg
-            dist/Loro-macos-arm64.dmg.sha256
-            dist/Loro-macos-arm64.zip
-            dist/Loro-macos-arm64.zip.sha256
-            dist/loro-macos-arm64.tar.gz
-            dist/loro-macos-arm64.tar.gz.sha256
-          generate_release_notes: true
-          fail_on_unmatched_files: true

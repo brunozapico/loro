@@ -83,7 +83,7 @@ final class DictationController {
         case .pushToTalk:
             switch event {
             case .pressed: startRecording()
-            case .released: stopAndTranscribe()
+            case .released: stopAndTranscribe(reason: "shortcut released")
             }
         case .toggle:
             guard event == .pressed else { return }
@@ -127,9 +127,9 @@ final class DictationController {
 
     /// Finish a capture before replacing its shortcut so releasing the old
     /// shortcut cannot leave the microphone active.
-    func finishActiveRecording() {
+    func finishActiveRecording(reason: String = "settings or permissions changed") {
         if isRecording {
-            stopAndTranscribe()
+            stopAndTranscribe(reason: reason)
         }
     }
 
@@ -154,8 +154,9 @@ final class DictationController {
             recordingApplicationIdentifier = Self.frontmostApplicationIdentifier()
             try capture.start()
             isRecording = true
+            Self.logger.notice("Recording started")
             let deadline = Timer(timeInterval: AudioCapture.maximumDuration, repeats: false) { [weak self] _ in
-                Task { @MainActor in self?.finishActiveRecording() }
+                Task { @MainActor in self?.finishActiveRecording(reason: "recording duration limit") }
             }
             recordingDeadlineTimer = deadline
             RunLoop.main.add(deadline, forMode: .common)
@@ -171,7 +172,7 @@ final class DictationController {
         }
     }
 
-    private func stopAndTranscribe() {
+    private func stopAndTranscribe(reason: String = "toggle or mode changed") {
         guard isRecording else { return }
         isRecording = false
         recordingDeadlineTimer?.invalidate()
@@ -179,6 +180,7 @@ final class DictationController {
         stopSilenceMonitoring()
 
         let samples = capture.stop()
+        Self.logger.notice("Recording stopped: \(reason, privacy: .public); samples: \(samples.count)")
         guard !samples.isEmpty else {
             overlay.hide()
             menuBar.setRecording(false)
@@ -269,7 +271,7 @@ final class DictationController {
         }
 
         if silenceDetector.shouldStop(at: ProcessInfo.processInfo.systemUptime) {
-            stopAndTranscribe()
+            stopAndTranscribe(reason: "silence timeout")
         }
     }
 
