@@ -117,12 +117,10 @@ final class LocalCorrectionManager: ObservableObject {
     @Published private(set) var availability: LocalCorrectionAvailability = .unsupportedOS
     @Published private(set) var contextFragmentCount = 0
 
-    private let isLowPowerModeEnabled: () -> Bool
     private let contextStore = CorrectionContextStore()
     private static let correctionOperation = TimedOperation<String>()
 
-    init(isLowPowerModeEnabled: @escaping () -> Bool = { ProcessInfo.processInfo.isLowPowerModeEnabled }) {
-        self.isLowPowerModeEnabled = isLowPowerModeEnabled
+    init() {
         refreshAvailability()
     }
 
@@ -140,8 +138,7 @@ final class LocalCorrectionManager: ObservableObject {
         refreshAvailability()
 
         guard enabled,
-              availability.isAvailable,
-              !isLowPowerModeEnabled()
+              availability.isAvailable
         else {
             return originalText
         }

@@ -51,15 +51,9 @@ struct CorrectionModeTests {
         }
     }
 
-    @Test @MainActor func lowPowerModeSkipsComposition() async {
-        let manager = LocalCorrectionManager(isLowPowerModeEnabled: { true })
-        let output = await manager.correct("escribí un correo", protectedPhrases: [], applicationIdentifier: "test", enabled: true, mode: .compose)
-        #expect(output == "escribí un correo")
-    }
-
     @Test(.enabled(if: ProcessInfo.processInfo.environment["LORO_RUN_CORRECTION_TESTS"] == "1"))
     @MainActor func realModelWritesAnEmailAndKeepsDictationFaithful() async throws {
-        let manager = LocalCorrectionManager(isLowPowerModeEnabled: { false })
+        let manager = LocalCorrectionManager()
         #expect(manager.availability.isAvailable, "Apple Intelligence must be ready for this integration test")
         guard manager.availability.isAvailable else { return }
         let original = "quiero mandar un mail a Lucía preguntándole si puede entregar el informe para el martes"

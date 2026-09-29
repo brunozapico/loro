@@ -209,24 +209,6 @@ private struct CorrectionSettingsView: View {
                 }
             }
 
-            Section("Battery and Reliability") {
-                Label(
-                    "Runs only once after each dictation",
-                    systemImage: "waveform.badge.magnifyingglass"
-                )
-                Label(
-                    "Automatically skipped in Low Power Mode",
-                    systemImage: "battery.25percent"
-                )
-                Label(
-                    "Falls back to the original text after a \(store.correctionMode.timeoutSeconds)-second timeout or any error",
-                    systemImage: "arrow.uturn.backward.circle"
-                )
-
-                Text("No cloud service, network request, background processing, transcript history, or persistent LLM session is used.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
         .formStyle(.grouped)
         .onAppear {

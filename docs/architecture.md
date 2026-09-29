@@ -118,7 +118,7 @@ Adding an engine = one new file conforming to `Transcriber`.
 
 Optional dictation editing or composition through Apple's on-device Foundation Models framework on macOS 26+. Every dictation creates a fresh `LanguageModelSession`, sends only the current fragment plus bounded same-app context, and discards the session after one response. `CorrectionRequest` supplies separate instructions: Dictate permits punctuation, grammar, capitalization, proper-name, and repetition fixes while preserving meaning; Compose follows spoken writing requests to produce an email, message, list, or rewrite without inventing facts or performing external actions. Dictate remains the default, and the selected mode is persisted in Settings.
 
-The manager returns the original Whisper transcript if Apple Intelligence is unavailable, Low Power Mode is enabled, generation throws, output validation fails, or the mode-specific timeout wins (4 seconds for Dictate, 30 seconds for Compose). It never prewarms the model or performs background inference.
+The manager returns the original Whisper transcript if Apple Intelligence is unavailable, generation throws, output validation fails, or the mode-specific timeout wins (4 seconds for Dictate, 30 seconds for Compose). It never prewarms the model or performs background inference.
 
 `CorrectionContextStore` is an in-process actor with no persistence path. It retains at most six fragments and 3,600 characters (approximately 800–1000 tokens), expires after three minutes, and clears when the foreground application's bundle identifier or correction mode changes. **New Context**, changing modes, disabling correction, `^C`, and normal menu-bar quit also clear it; process termination destroys the RAM either way.
 
@@ -232,7 +232,7 @@ Models are not bundled. WhisperKit downloads and caches them on first selection 
 8. Overlay switches to spinner. Status: `transcribing`.
 9. `AudioCapture` stops, hands buffer to active `Transcriber`.
 10. `Transcriber` detects the utterance language for multilingual models, runs CoreML inference in transcription mode, and returns text in the spoken language.
-11. If enabled and available, `LocalCorrectionManager` edits or composes the current fragment using the selected mode and bounded same-app RAM context. Low Power Mode, errors, invalid output, and the mode-specific timeout fall back to the original text.
+11. If enabled and available, `LocalCorrectionManager` edits or composes the current fragment using the selected mode and bounded same-app RAM context. Errors, invalid output, and the mode-specific timeout fall back to the original text.
 12. `TextReplacementEngine` applies the configured local phrase substitutions in memory, after the LLM.
 13. `TextInjector` posts the resulting string at the cursor.
 14. The final injected fragment is retained in the volatile context actor when correction is enabled.

@@ -66,7 +66,7 @@ Open the bird icon in the menu bar and choose **Settings…**. Preferences persi
 
 The recommended model is Whisper Large v3 626 MB, optimized for maximum multilingual accuracy. Language is detected for every dictation, so Spanish and English utterances can alternate without changing a setting; occasional English terms inside Spanish speech remain supported. Model changes take effect after restarting Loro. `--model` remains a session-only override.
 
-Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Intelligence enabled. It is optional and always falls back to the original Whisper transcript if the model is unavailable, Low Power Mode is active, an error occurs, or the timeout is reached (4 seconds for Dictate, 30 seconds for Compose).
+Local correction requires macOS 26, an eligible Apple Silicon Mac, and Apple Intelligence enabled. It is optional and always falls back to the original Whisper transcript if the model is unavailable, an error occurs, or the timeout is reached (4 seconds for Dictate, 30 seconds for Compose).
 
 ### Dictate or compose
 
@@ -149,7 +149,7 @@ scripts/build-app.sh 0.3.1
 open dist/Loro-macos-arm64.dmg
 ```
 
-To also test email and list composition with the real Apple model, run `LORO_RUN_CORRECTION_TESTS=1 scripts/test.sh` on a Mac where Apple Intelligence is ready. The integration test bypasses the battery check only inside the test; it does not change your energy settings.
+To also test email and list composition with the real Apple model, run `LORO_RUN_CORRECTION_TESTS=1 scripts/test.sh` on a Mac where Apple Intelligence is ready. Both modes also work in Low Power Mode.
 
 The build creates `Loro.app`, a drag-to-Applications DMG, a ZIP and checksums in `dist/`. CI runs tests and creates test artifacts on every push to main. Publish installer assets from the signing Mac; tagged CI builds cannot replace them with ad-hoc binaries. Set `CODESIGN_IDENTITY` to a Developer ID identity for signing; notarization is a separate distribution step.
 
