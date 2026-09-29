@@ -160,3 +160,7 @@ Keep the same signing certificate when building updates. Ad-hoc signatures ident
 When migrating from an old ad-hoc version, remove the old Loro entry in **System Settings → Privacy & Security → Accessibility**, add **/Applications/Loro.app**, and enable it once. Reopen Loro afterward. Do not add the old `/usr/local/bin/loro` for the native app. Loro cannot grant itself this permission.
 
 The shortcut now runs on its own thread, so starting the microphone cannot stall its event tap. If macOS suspends the tap, Loro checks whether the shortcut is still physically held instead of ending the recording immediately. Diagnostic logs include the reason recording stopped, but never the audio or transcript.
+
+## License
+
+Loro is licensed under the [MIT License](LICENSE). Copyright © 2026 Andrew Jones and Bruno Zapico.
